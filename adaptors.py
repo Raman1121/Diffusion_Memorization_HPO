@@ -1210,50 +1210,48 @@ def return_new_optim_params(unet):
     return optim_params, optim_params_1d
 
     
-def enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask, verbose=False):
+def enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask):
+    attention_pattern = [0,1]
 
-    '''
-    unet_with_svdiff: A U-Net model with SV-DIFF
-    binary_mask: A binary mask of length 12, where 0 means disable and 1 means enable
-    '''
-
-
-    attention_pattern = [0,0,1,1]
-    attn_pattern = [0,1]
+    mid_block_mask = [binary_mask[6]]
+    down_block_mask = binary_mask[0:6]
+    up_block_mask = binary_mask[7:]
     
-    down_blocks = unet_with_svdiff.down_blocks
-
-    optim_params = []
-    optim_params_1d = []
+    # Down Blocks
+    print("Down Blocks")
+    for i in range(len(down_block_mask)):
+        block_idx = i//2
+        attention_idx = attention_pattern[i%2]
+        mask_element = down_block_mask[i]
     
-    for i in range(len(binary_mask)):
-        # print("i: ", i)
-        mask_element = binary_mask[i]
-        block_idx = i//4
-        attention_idx = attention_pattern[i%4]
-        attn_idx = attn_pattern[i%2]
-
-        if(verbose):
-            print("Block: ", block_idx)
-            print("Attention: ", attention_idx)
-            print("attn idx: ", attn_idx)
-            print("\n")
-    
-        block = down_blocks[block_idx]
-        attention = block.attentions[attention_idx]
-        if(attn_idx == 0):
-            attn = attention.transformer_blocks[0].attn1
-        elif(attn_idx == 1):
-            attn = attention.transformer_blocks[0].attn2
+        print("Block: ", block_idx)
+        print("Attention: ", attention_idx)
     
         if(mask_element == 0):
-            disable_grad_svdiff(attn)
-            print("Disabling Block {} | attention {} | attn{}".format(block_idx, attention_idx, attn_idx))
-        # elif(mask_element == 1):
-        #     enable_grad(attn)
-        #     print("Enabling Block {} | attention {} | attn{}".format(block_idx, attention_idx, attn_idx))
+            disable_grad_svdiff(unet_with_svdiff.down_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+        else:
+            continue # Elements are trainable by default
+    
+    # Mid Block
+    print("Mid Blocks")
+    for i in range(len(mid_block_mask)):
+        mask_element = mid_block_mask[i]
+    
+        if(mask_element == 0):
+            disable_grad_svdiff(unet_with_svdiff.mid_block.attentions[0].transformer_blocks)
+    
+    # Up Blocks
+    print("Up Blocks")
+    for i in range(len(up_block_mask)):
+        mask_element = up_block_mask[i] 
+        block_idx = (i//2)+1 # Indexing for up-blocks starts from 1
+        attention_idx = attention_pattern[i%2]
+        print("Block: ", block_idx)
+        print("Attention: ", attention_idx)
+    
+        if(mask_element == 0):
+            disable_grad_svdiff(unet_with_svdiff.up_blocks[block_idx].attentions[attention_idx].transformer_blocks)
 
-    # Get new optim_params and optim_params_1d
     optim_params, optim_params_1d = return_new_optim_params(unet_with_svdiff)
 
     return unet_with_svdiff, optim_params, optim_params_1d

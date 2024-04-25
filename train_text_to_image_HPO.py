@@ -1381,9 +1381,3 @@ if __name__ == "__main__":
             )
         except:
             print("Error in plotting parameter rank plot")
-
-
-
-
-
-
