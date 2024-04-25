@@ -429,6 +429,8 @@ def parse_args():
         choices=[
             "max_norm",
             "avg_norm",
+            "max_norm_FID",
+            "avg_norm_FID",
         ],
     )
     parser.add_argument("--num_trials", type=int, default=5)

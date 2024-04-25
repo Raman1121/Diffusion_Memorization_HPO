@@ -374,6 +374,7 @@ def prepare_memorization_data(args, tokenizer):
 
     args.original_train_data_path = yaml_data["train_csv"]
     args.memorization_data_path = yaml_data["memorization_csv"]
+    args.test_data_path = yaml_data["test_csv"]
 
     mem_df = pd.read_excel(args.memorization_data_path)
 
@@ -425,6 +426,16 @@ def prepare_memorization_data(args, tokenizer):
         use_real_images=True,
     )
 
+    test_dataset = MimicCXRDataset(
+        csv_file=args.test_data_path,
+        images_dir=args.images_path_train,
+        tokenizer=tokenizer,
+        transform=train_transforms,
+        seed=args.dataset_split_seed,
+        dataset_size_ratio=args.data_size_ratio,    # 0.1 corresponds to 1371 images which is good for calculating FID
+        use_real_images=True,
+    )
+
     # The training dataset would consist of the original dataset and the memorization dataset repeated 'args.n_repeats' times
     train_dataset = ConcatDataset([train_dataset_original] + [train_dataset_mem]*args.n_repeats)
 
@@ -444,7 +455,14 @@ def prepare_memorization_data(args, tokenizer):
         num_workers=args.dataloader_num_workers,
     )
 
-    return train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, MEMORIZATION_PROMPTS
+    test_dataloader = torch.utils.data.DataLoader(
+        test_dataset,
+        shuffle=False,
+        batch_size=1,
+        num_workers=args.dataloader_num_workers,
+    )
+
+    return train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, MEMORIZATION_PROMPTS, test_dataloader
 
 
 
@@ -629,6 +647,8 @@ def prepare_optimizer(args, parameters):
 
 # def main():
 def objective(trial):
+
+    start_time = time.time()
     
     if args.non_ema_revision is not None:
         deprecate(
@@ -858,7 +878,7 @@ def objective(trial):
 
     # Prepare Datasets and DataLoaders
     # train_dataset, val_dataset, test_dataset, train_dataloader, val_dataloader, test_dataloader = prepare_data(args, tokenizer)
-    train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, MEMORIZATION_PROMPTS = prepare_memorization_data(args, tokenizer)
+    train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, MEMORIZATION_PROMPTS, test_dataloader = prepare_memorization_data(args, tokenizer)
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
@@ -877,8 +897,8 @@ def objective(trial):
     )
 
     # Prepare everything with our `accelerator`.
-    unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        unet, optimizer, train_dataloader, lr_scheduler
+    unet, optimizer, train_dataloader, test_dataloader, lr_scheduler = accelerator.prepare(
+        unet, optimizer, train_dataloader, test_dataloader, lr_scheduler
     )
 
     if args.use_ema:
@@ -1182,7 +1202,7 @@ def objective(trial):
         # Run Validation Step
         # Preferable to run this at the end of training
 
-        start_time = time.time()
+        
         # if(global_step % args.validation_steps == 0 and global_step != 0):
         if args.use_ema:
             # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
@@ -1196,15 +1216,76 @@ def objective(trial):
         if args.use_ema:
             # Switch back to the original UNet parameters.
             ema_unet.restore(unet.parameters())
-        end_time = time.time()
 
         accelerator.end_training()
 
-        print("Time taken for running the final validation: ", end_time - start_time)
+        
 
+        # Run an inference on Memorization Prompts to calculate the FID SCORE
+        # Create the pipeline using the trained modules and save it.
+        accelerator.wait_for_everyone()
+
+        # Run this step only if doing multi-objective HPO
+        if(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'):
+            if accelerator.is_main_process:
+                unet = accelerator.unwrap_model(unet)
+                if args.use_ema:
+                    ema_unet.copy_to(unet.parameters())
+
+                pipeline = StableDiffusionPipeline.from_pretrained(
+                        args.pretrained_model_name_or_path,
+                        text_encoder=text_encoder,
+                        vae=vae,
+                        unet=unet,
+                        revision=args.revision,
+                    )
+                pipeline = pipeline.to(accelerator.device)
+                pipeline.torch_dtype = weight_dtype
+                # pipeline.save_pretrained(args.output_dir)
+
+                # Generate images
+                os.makedirs(args.synthetic_images_dir)
+                df = pd.DataFrame(columns=['path'])
+                all_real_paths = []
+
+
+                print("Generating synthetic images using the fine-tuned model.")
+                num_images_per_prompt = 1
+                for epoch in range(num_images_per_prompt):
+                    for batch in test_dataloader:
+                        print("PROMPT: ", batch["text"])
+                        try:
+                            result = pipeline(
+                                prompt = batch["text"],
+                                height = args.resolution,
+                                width = args.resolution,
+                                guidance_scale=4,
+                                num_inference_steps=50
+                            )
+                        except:
+                            import pdb; pdb.set_trace()
+
+                        for i, img in enumerate(result.images):
+                            # all_real_paths.append(batch["path"][i])
+                            img_name = batch["path"][i].split("/")[-1].split(".")[0]
+                            img.save(os.path.join(args.synthetic_images_dir, img_name + ".jpg"))
+                
+                # Calculate the FID Score
+                print("Calculating the FID Score.")
+                # We need image tensors of both real and synthetic images
+
+
+        end_time = time.time()
+        print("Time taken for this HPO iteration: ", end_time - start_time)
+
+        try:
+            # Remove the directory of syntheic images
+            shutil.rmtree(args.synthetic_images_dir)
+        except:
+            pass
+            
         # Pruning
         trial.report(memorization_metric, epoch)
-
         if trial.should_prune():
             raise optuna.exceptions.TrialPruned()
 
@@ -1218,6 +1299,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type)
+    args.synthetic_images_dir = os.path.join(args.output_dir, "Synthetic Images")
 
     if args.pruner == "SuccessiveHalving":
         pruner = optuna.pruners.SuccessiveHalvingPruner()
