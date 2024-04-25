@@ -1259,7 +1259,7 @@ def enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask, verbose=False
     return unet_with_svdiff, optim_params, optim_params_1d
 
 ##### 2. DiffFit
-def enable_disable_difffit_with_mask(unet_with_difffit, binary_mask, verbose=False):
+def enable_disable_difffit_with_mask(unet, binary_mask, verbose=False):
     mid_block_mask = [binary_mask[6]]
     down_block_mask = binary_mask[0:6]
     up_block_mask = binary_mask[7:]
@@ -1311,5 +1311,5 @@ def enable_disable_difffit_with_mask(unet_with_difffit, binary_mask, verbose=Fal
         if(mask_element == 0):
             disable_grad_difffit(unet.up_blocks[block_idx].attentions[attention_idx].transformer_blocks)
 
-    return unet_with_difffit
+    return unet
     

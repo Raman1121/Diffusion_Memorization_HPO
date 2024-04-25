@@ -66,6 +66,8 @@ from adaptors import *
 import optuna
 from optuna.trial import TrialState
 
+from parse_args import parse_args
+
 if is_wandb_available():
     import wandb
 
@@ -363,466 +365,7 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
 
     return val_loss, memorization_metric_global
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Simple example of a training script.")
-    parser.add_argument(
-        "--input_perturbation",
-        type=float,
-        default=0,
-        help="The scale of input perturbation. Recommended 0.1.",
-    )
-    parser.add_argument(
-        "--pretrained_model_name_or_path",
-        type=str,
-        default="runwayml/stable-diffusion-v1-5",
-        required=True,
-        help="Path to pretrained model or model identifier from huggingface.co/models.",
-    )
-    parser.add_argument(
-        "--revision",
-        type=str,
-        default=None,
-        required=False,
-        help="Revision of pretrained model identifier from huggingface.co/models.",
-    )
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default='MIMIC',
-        help=(
-            "The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private,"
-            " dataset). It can also be a path pointing to a local copy of a dataset in your filesystem,"
-            " or to a folder containing files that 🤗 Datasets can understand."
-        ),
-    )
-    parser.add_argument(
-        "--non_mem_dataset",
-        type=str,
-        default=None,
-    )
-    parser.add_argument(
-        "--dataset_config_name",
-        type=str,
-        default=None,
-        help="The config of the Dataset, leave as None if there's only one config.",
-    )
-    parser.add_argument(
-        "--train_data_dir",
-        type=str,
-        default=None,
-        help=(
-            "A folder containing the training data. Folder contents must follow the structure described in"
-            " https://huggingface.co/docs/datasets/image_dataset#imagefolder. In particular, a `metadata.jsonl` file"
-            " must exist to provide the captions for the images. Ignored if `dataset` is specified."
-        ),
-    )
-    parser.add_argument(
-        "--image_column",
-        type=str,
-        default="image",
-        help="The column of the dataset containing an image.",
-    )
-    parser.add_argument(
-        "--caption_column",
-        type=str,
-        default="text",
-        help="The column of the dataset containing a caption or a list of captions.",
-    )
-    parser.add_argument(
-        "--max_train_samples",
-        type=int,
-        default=None,
-        help=(
-            "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
-        ),
-    )
-    parser.add_argument(
-        "--validation_prompts",
-        type=str,
-        default=None,
-        nargs="+",
-        help=(
-            "A set of prompts evaluated every `--validation_epochs` and logged to `--report_to`."
-        ),
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="sd-model-finetuned",
-        help="The output directory where the model predictions and checkpoints will be written.",
-    )
-    parser.add_argument(
-        "--cache_dir",
-        type=str,
-        default=None,
-        help="The directory where the downloaded models and datasets will be stored.",
-    )
-    parser.add_argument(
-        "--seed", type=int, default=None, help="A seed for reproducible training."
-    )
-    parser.add_argument(
-        "--resolution",
-        type=int,
-        default=512,
-        help=(
-            "The resolution for input images, all the images in the train/validation dataset will be resized to this"
-            " resolution"
-        ),
-    )
-    parser.add_argument(
-        "--center_crop",
-        default=False,
-        action="store_true",
-        help=(
-            "Whether to center crop the input images to the resolution. If not set, the images will be randomly"
-            " cropped. The images will be resized to the resolution first before cropping."
-        ),
-    )
-    parser.add_argument(
-        "--random_flip",
-        action="store_true",
-        help="whether to randomly flip images horizontally",
-    )
-    parser.add_argument(
-        "--train_batch_size",
-        type=int,
-        default=16,
-        help="Batch size (per device) for the training dataloader.",
-    )
-    parser.add_argument("--num_train_epochs", type=int, default=100)
-    parser.add_argument(
-        "--max_train_steps",
-        type=int,
-        default=None,
-        help="Total number of training steps to perform.  If provided, overrides num_train_epochs.",
-    )
-    parser.add_argument(
-        "--gradient_accumulation_steps",
-        type=int,
-        default=1,
-        help="Number of updates steps to accumulate before performing a backward/update pass.",
-    )
-    parser.add_argument(
-        "--gradient_checkpointing",
-        action="store_true",
-        help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
-    )
-    parser.add_argument(
-        "--learning_rate",
-        type=float,
-        default=1e-4,
-        help="Initial learning rate (after the potential warmup period) to use.",
-    )
-    parser.add_argument(
-        "--scale_lr",
-        action="store_true",
-        default=False,
-        help="Scale the learning rate by the number of GPUs, gradient accumulation steps, and batch size.",
-    )
-    parser.add_argument(
-        "--lr_scheduler",
-        type=str,
-        default="constant",
-        help=(
-            'The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial",'
-            ' "constant", "constant_with_warmup"]'
-        ),
-    )
-    parser.add_argument(
-        "--lr_warmup_steps",
-        type=int,
-        default=500,
-        help="Number of steps for the warmup in the lr scheduler.",
-    )
-    parser.add_argument(
-        "--snr_gamma",
-        type=float,
-        default=None,
-        help="SNR weighting gamma to be used if rebalancing the loss. Recommended value is 5.0. "
-        "More details here: https://arxiv.org/abs/2303.09556.",
-    )
-    parser.add_argument(
-        "--use_8bit_adam",
-        action="store_true",
-        help="Whether or not to use 8-bit Adam from bitsandbytes.",
-    )
-    parser.add_argument(
-        "--allow_tf32",
-        action="store_true",
-        help=(
-            "Whether or not to allow TF32 on Ampere GPUs. Can be used to speed up training. For more information, see"
-            " https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices"
-        ),
-    )
-    parser.add_argument(
-        "--use_ema", action="store_true", help="Whether to use EMA model."
-    )
-    parser.add_argument(
-        "--non_ema_revision",
-        type=str,
-        default=None,
-        required=False,
-        help=(
-            "Revision of pretrained non-ema model identifier. Must be a branch, tag or git identifier of the local or"
-            " remote repository specified with --pretrained_model_name_or_path."
-        ),
-    )
-    parser.add_argument(
-        "--dataloader_num_workers",
-        type=int,
-        default=0,
-        help=(
-            "Number of subprocesses to use for data loading. 0 means that the data will be loaded in the main process."
-        ),
-    )
-    parser.add_argument(
-        "--adam_beta1",
-        type=float,
-        default=0.9,
-        help="The beta1 parameter for the Adam optimizer.",
-    )
-    parser.add_argument(
-        "--adam_beta2",
-        type=float,
-        default=0.999,
-        help="The beta2 parameter for the Adam optimizer.",
-    )
-    parser.add_argument(
-        "--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use."
-    )
-    parser.add_argument(
-        "--adam_epsilon",
-        type=float,
-        default=1e-08,
-        help="Epsilon value for the Adam optimizer",
-    )
-    parser.add_argument(
-        "--max_grad_norm", default=1.0, type=float, help="Max gradient norm."
-    )
-    parser.add_argument(
-        "--push_to_hub",
-        action="store_true",
-        help="Whether or not to push the model to the Hub.",
-    )
-    parser.add_argument(
-        "--hub_token",
-        type=str,
-        default=None,
-        help="The token to use to push to the Model Hub.",
-    )
-    parser.add_argument(
-        "--prediction_type",
-        type=str,
-        default=None,
-        help="The prediction_type that shall be used for training. Choose between 'epsilon' or 'v_prediction' or leave `None`. If left to `None` the default prediction type of the scheduler: `noise_scheduler.config.prediciton_type` is chosen.",
-    )
-    parser.add_argument(
-        "--hub_model_id",
-        type=str,
-        default=None,
-        help="The name of the repository to keep in sync with the local `output_dir`.",
-    )
-    parser.add_argument(
-        "--logging_dir",
-        type=str,
-        default="logs",
-        help=(
-            "[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to"
-            " *output_dir/runs/**CURRENT_DATETIME_HOSTNAME***."
-        ),
-    )
-    parser.add_argument(
-        "--mixed_precision",
-        type=str,
-        default=None,
-        choices=["no", "fp16", "bf16"],
-        help=(
-            "Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >="
-            " 1.10.and an Nvidia Ampere GPU.  Default to the value of accelerate config of the current system or the"
-            " flag passed with the `accelerate.launch` command. Use this argument to override the accelerate config."
-        ),
-    )
-    parser.add_argument(
-        "--report_to",
-        type=str,
-        default="tensorboard",
-        help=(
-            'The integration to report the results and logs to. Supported platforms are `"tensorboard"`'
-            ' (default), `"wandb"` and `"comet_ml"`. Use `"all"` to report to all integrations.'
-        ),
-    )
-    parser.add_argument(
-        "--local_rank",
-        type=int,
-        default=-1,
-        help="For distributed training: local_rank",
-    )
-    parser.add_argument(
-        "--checkpointing_steps",
-        type=int,
-        default=500,
-        help=(
-            "Save a checkpoint of the training state every X updates. These checkpoints are only suitable for resuming"
-            " training using `--resume_from_checkpoint`."
-        ),
-    )
-    parser.add_argument(
-        "--checkpoints_total_limit",
-        type=int,
-        default=None,
-        help=("Max number of checkpoints to store."),
-    )
-    parser.add_argument(
-        "--resume_from_checkpoint",
-        type=str,
-        default=None,
-        help=(
-            "Whether training should be resumed from a previous checkpoint. Use a path saved by"
-            ' `--checkpointing_steps`, or `"latest"` to automatically select the last available checkpoint.'
-        ),
-    )
-    parser.add_argument(
-        "--enable_xformers_memory_efficient_attention",
-        action="store_true",
-        help="Whether or not to use xformers.",
-    )
-    parser.add_argument(
-        "--noise_offset", type=float, default=0, help="The scale of noise offset."
-    )
-    parser.add_argument(
-        "--validation_epochs",
-        type=int,
-        default=5,
-        help="Run validation every X epochs.",
-    )
-    parser.add_argument(
-        "--validation_steps",
-        type=int,
-        default=1000,
-        help="Run validation every X epochs.",
-    )
-    parser.add_argument(
-        "--tracker_project_name",
-        type=str,
-        default="text2image-fine-tune",
-        help=(
-            "The `project_name` argument passed to Accelerator.init_trackers for"
-            " more information see https://huggingface.co/docs/accelerate/v0.17.0/en/package_reference/accelerator#accelerate.Accelerator"
-        ),
-    )
-    parser.add_argument(
-        "--end",
-        type=int,
-        default=10000,
-    )
-    parser.add_argument(
-        "--repeats",
-        type=int,
-        default=1,
-    )
-    parser.add_argument(
-        "--non_mem_ratio",
-        type=float,
-        default=0,
-    )
 
-    ### mitigation method:
-    parser.add_argument("--prompt_aug_style", default=None)
-    parser.add_argument("--repeat_num", default=1, type=int)
-    parser.add_argument(
-        "--hard_threshold",
-        type=float,
-        default=None,
-    )
-
-    # MIMIC DATSAET ARGS
-    parser.add_argument("--dataset_split_seed", default=42, type=str)
-    parser.add_argument("--data_size_ratio", default=1, type=float)
-
-    # UNet Pretraining
-    parser.add_argument(
-        "--unet_pretraining_type",
-        default="full",
-        type=str,
-        choices=[
-            "lorav2",
-            "svdiff",
-            "difffit",
-            "attention",
-            "attention_down_blocks",
-            "attention_up_blocks",
-            "tsa",
-            "tsa2",
-            "norm",
-            "bias",
-            "norm_bias",
-            "norm_bias_attention",
-            "full",
-            "full_without_attention",
-            "ssf",
-            "oft",
-            "loha",
-            "lokr",
-            "freeze",
-            "auto_svdiff",
-            "auto_difffit",
-        ],
-    )
-
-    parser.add_argument(
-        "--disable_training",
-        action="store_true",
-    )
-
-    parser.add_argument(
-        "--n_repeats",
-        type=int,
-        default=1,
-        help="Number of times to repeat a dataset for deliberate memorization",
-    )
-
-    # HPO Args
-    # parser.add_argument(
-    #     "--return_avg_norm",
-    #     action="store_true",
-    # )
-    # parser.add_argument(
-    #     "--return_max_norm",
-    #     action="store_true",
-    # )
-    parser.add_argument(
-        "--objective_metric",
-        type=str,
-        default=None,
-        required=True,
-        choices=[
-            "max_norm",
-            "avg_norm",
-        ],
-    )
-    parser.add_argument("--num_trials", type=int, default=5)
-    parser.add_argument(
-        "--pruner",
-        type=str,
-        default="SuccessiveHalving",
-        choices=["SuccessiveHalving", "MedianPruner", "Hyperband"],
-    )
-
-    args = parser.parse_args()
-    env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
-    if env_local_rank != -1 and env_local_rank != args.local_rank:
-        args.local_rank = env_local_rank
-
-    # Sanity checks
-    # if args.dataset is None and args.train_data_dir is None:
-    #     raise ValueError("Need either a dataset name or a training folder.")
-
-    # default to using the same revision for the non-ema model if not specified
-    if args.non_ema_revision is None:
-        args.non_ema_revision = args.revision
-
-    return args
 
 def prepare_memorization_data(args, tokenizer):
     # Import CSV path from the YAML file
@@ -1014,7 +557,7 @@ def prepare_model(args, binary_mask=None):
         assert binary_mask is not None
 
         # Apply SV-DIFF to U-Net
-        unet, optim_params, optim_params_1d  = get_adapted_unet(
+        unet_with_svdiff, optim_params, optim_params_1d  = get_adapted_unet(
                 unet=unet, 
                 method="svdiff",
                 args=args,
@@ -1022,14 +565,14 @@ def prepare_model(args, binary_mask=None):
             )
 
         # Apply Mask to SV-DIFF U-Net
-        unet, optim_params, optim_params_1d = enable_disable_svdiff_with_mask(unet, binary_mask)
+        unet, optim_params, optim_params_1d = enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask)
 
     elif args.unet_pretraining_type == 'auto_difffit':
 
         assert binary_mask is not None
 
         # Apply DiffFit to U-Net
-        unet = get_adapted_unet(
+        unet_with_difffit = get_adapted_unet(
                 unet=unet, 
                 method="difffit",
                 args=args,
@@ -1086,21 +629,7 @@ def prepare_optimizer(args, parameters):
 
 # def main():
 def objective(trial):
-    # args = parse_args()
-
-    # Import CSV path from the YAML file
-    # with open("data_config.yaml") as file:
-    #     yaml_data = yaml.safe_load(file)
-
-    # args.train_data_path = yaml_data["train_csv"]
-    # args.val_data_path = yaml_data["val_csv"]
-    # args.test_data_path = yaml_data["test_csv"]
-
-    # args.images_path_train = Path(yaml_data["images_path_train"])
-    # args.images_path_val = Path(yaml_data["images_path_val"])
-
-    # print("Train Data CSV: {}".format(args.train_data_path))
-
+    
     if args.non_ema_revision is not None:
         deprecate(
             "non_ema_revision!=None",
@@ -1215,7 +744,7 @@ def objective(trial):
     print("UNET")
     binary_mask = create_opt_mask(trial, args)
     print("BINARY MASK: ", binary_mask)
-    
+
     unet = prepare_model(args, binary_mask)
     tunable_params = check_tunable_params(unet, False)
     
@@ -1688,6 +1217,8 @@ if __name__ == "__main__":
 
     args = parse_args()
 
+    args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type)
+
     if args.pruner == "SuccessiveHalving":
         pruner = optuna.pruners.SuccessiveHalvingPruner()
     elif args.pruner == "MedianPruner":
@@ -1718,6 +1249,24 @@ if __name__ == "__main__":
 
     print("  Value: ", trial.value)
 
+    print("  Params: ")
+    best_mask = []
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))
+        if key == "lr":
+            continue
+        best_mask.append(value)
+    
+    # Save the best mask
+    best_mask = np.array(best_mask).astype(np.int8)
+    mask_savedir = os.path.join(
+        args.output_dir, "Saved Masks", args.unet_pretraining_type
+    )
+    os.makedirs(mask_savedir, exist_ok=True)
+    print("Saving the best mask at: ", mask_savedir)
+    mask_name = "best_mask.npy"
+    np.save(os.path.join(mask_savedir, mask_name), best_mask)
+
     # Creating Optuna study statistics dataframe
     df = study.trials_dataframe()
 
@@ -1727,7 +1276,7 @@ if __name__ == "__main__":
                 "datetime_start",
                 "datetime_complete",
                 "duration",
-                "system_attrs_completed_rung_0",
+                #"system_attrs_completed_rung_0",
             ],
             axis=1,
         )  # Drop unnecessary columns
@@ -1740,6 +1289,98 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(args.output_dir, stats_df_savedir), exist_ok=True)
     df = df.rename(columns={"value": args.objective_metric})
     df.to_csv(os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False)
+
+    args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
+    os.makedirs(args.plots_save_dir, exist_ok=True)
+
+    #################### Plotting ####################
+
+    # 1. Parameter importance plots
+
+    if not args.disable_HPO_plotting:
+        # a) Bar Plot
+        try:
+            param_imp_plot = optuna.visualization.matplotlib.plot_param_importances(
+                study
+            )
+            param_imp_plot.figure.tight_layout()
+            param_imp_plot.figure.savefig(
+                os.path.join(
+                    args.plots_save_dir,
+                    "param_importance_{}.jpg".format(args.objective_metric),
+                ),
+                format="jpg",
+            )
+        except:
+            print("Error in plotting parameter importance plot")
+        
+        # b) Contour Plot
+        try:
+            contour_fig = plt.figure()
+            contour_plot = optuna.visualization.matplotlib.plot_contour(study)
+        except:
+            print("Error in plotting contour plot")
+
+        # 3. Optimization history plot
+        try:
+            history_plot = optuna.visualization.matplotlib.plot_optimization_history(
+                study
+            )
+            history_plot.figure.tight_layout()
+            history_plot.figure.savefig(
+                os.path.join(
+                    args.plots_save_dir,
+                    "optimization_history_{}.jpg".format(args.objective_metric),
+                ),
+                format="jpg",
+            )
+        except:
+            print("Error in plotting optimization history plot")
+
+        # 4. High-dimensional parameter relationships plot
+        try:
+            parallel_plot = optuna.visualization.matplotlib.plot_parallel_coordinate(
+                study
+            )
+            parallel_plot.figure.tight_layout()
+            parallel_plot.figure.savefig(
+                os.path.join(
+                    args.plots_save_dir,
+                    "parallel_coordinate_{}.jpg".format(args.objective_metric),
+                ),
+                format="jpg",
+            )
+        except:
+            print("Error in plotting parallel coordinate plot")
+
+        # 5. Pareto front plot
+        try:
+            pareto_plot = optuna.visualization.matplotlib.plot_pareto_front(study)
+            pareto_plot.figure.tight_layout()
+            pareto_plot.figure.savefig(
+                os.path.join(
+                    args.plots_save_dir,
+                    "pareto_plot_{}.jpg".format(args.objective_metric),
+                ),
+                format="jpg",
+            )
+        except:
+            print("Error in plotting Pareto front plot")
+
+        # 6. Parameter Rank plot
+        try:
+            # param_rank_plot = optuna.visualization.matplotlib.plot_param_importances(study, target=lambda t: t.params[args.objective_metric])
+            param_rank_plot = optuna.visualization.matplotlib.plot_rank(study)
+            param_rank_plot.figure.tight_layout()
+            param_rank_plot.figure.savefig(
+                os.path.join(
+                    args.plots_save_dir,
+                    "rank_plot_{}.jpg".format(args.objective_metric),
+                ),
+                format="jpg",
+            )
+        except:
+            print("Error in plotting parameter rank plot")
 
 
 
