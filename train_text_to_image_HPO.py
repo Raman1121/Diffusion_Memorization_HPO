@@ -61,6 +61,7 @@ from optim_utils import *
 import yaml
 from get_dataset_mimic_cxr import MimicCXRDataset
 from adaptors import *
+from metrics_utils import *
 
 # For HPO
 import optuna
@@ -325,9 +326,9 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
         #     assert args.return_avg_norm is False
         #     memorization_metric = torch.max(noise_pred_text_norm).cpu().item()
 
-        if(args.objective_metric == 'max_norm'):
+        if(args.objective_metric == 'max_norm' or args.objective_metric == 'max_norm_FID'):
             memorization_metric = torch.max(noise_pred_text_norm).cpu().item()
-        elif(args.objective_metric == 'avg_norm'):
+        elif(args.objective_metric == 'avg_norm' or args.objective_metric == 'avg_norm_FID'):
             memorization_metric = (torch.sum(noise_pred_text_norm).cpu()/len(timesteps)).item()
 
         memorization_metric_global += memorization_metric
@@ -377,6 +378,7 @@ def prepare_memorization_data(args, tokenizer):
     args.test_data_path = yaml_data["test_csv"]
 
     mem_df = pd.read_excel(args.memorization_data_path)
+    test_df = pd.read_excel(args.test_data_path)
 
     try:
         MEMORIZATION_PROMPTS = mem_df["text"].tolist()[:10] # Selecting top 10 prompts from the memorization dataset for MIFID calculation
@@ -426,15 +428,15 @@ def prepare_memorization_data(args, tokenizer):
         use_real_images=True,
     )
 
-    test_dataset = MimicCXRDataset(
-        csv_file=args.test_data_path,
-        images_dir=args.images_path_train,
-        tokenizer=tokenizer,
-        transform=train_transforms,
-        seed=args.dataset_split_seed,
-        dataset_size_ratio=args.data_size_ratio,    # 0.1 corresponds to 1371 images which is good for calculating FID
-        use_real_images=True,
-    )
+    # test_dataset = MimicCXRDataset(
+    #     csv_file=args.test_data_path,
+    #     images_dir=args.images_path_train,
+    #     tokenizer=tokenizer,
+    #     transform=train_transforms,
+    #     seed=args.dataset_split_seed,
+    #     dataset_size_ratio=args.data_size_ratio,    # 0.1 corresponds to 1371 images which is good for calculating FID
+    #     use_real_images=True,
+    # )
 
     # The training dataset would consist of the original dataset and the memorization dataset repeated 'args.n_repeats' times
     train_dataset = ConcatDataset([train_dataset_original] + [train_dataset_mem]*args.n_repeats)
@@ -455,14 +457,14 @@ def prepare_memorization_data(args, tokenizer):
         num_workers=args.dataloader_num_workers,
     )
 
-    test_dataloader = torch.utils.data.DataLoader(
-        test_dataset,
-        shuffle=False,
-        batch_size=1,
-        num_workers=args.dataloader_num_workers,
-    )
+    # test_dataloader = torch.utils.data.DataLoader(
+    #     test_dataset,
+    #     shuffle=False,
+    #     batch_size=1,
+    #     num_workers=args.dataloader_num_workers,
+    # )
 
-    return train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, MEMORIZATION_PROMPTS, test_dataloader
+    return train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, MEMORIZATION_PROMPTS, test_df
 
 
 
@@ -878,7 +880,7 @@ def objective(trial):
 
     # Prepare Datasets and DataLoaders
     # train_dataset, val_dataset, test_dataset, train_dataloader, val_dataloader, test_dataloader = prepare_data(args, tokenizer)
-    train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, MEMORIZATION_PROMPTS, test_dataloader = prepare_memorization_data(args, tokenizer)
+    train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, MEMORIZATION_PROMPTS, test_df = prepare_memorization_data(args, tokenizer)
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
@@ -897,8 +899,8 @@ def objective(trial):
     )
 
     # Prepare everything with our `accelerator`.
-    unet, optimizer, train_dataloader, test_dataloader, lr_scheduler = accelerator.prepare(
-        unet, optimizer, train_dataloader, test_dataloader, lr_scheduler
+    unet, vae, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+        unet, vae, optimizer, train_dataloader, lr_scheduler
     )
 
     if args.use_ema:
@@ -1245,35 +1247,54 @@ def objective(trial):
 
                 # Generate images
                 os.makedirs(args.synthetic_images_dir)
-                df = pd.DataFrame(columns=['path'])
-                all_real_paths = []
+                # df = pd.DataFrame(columns=['path'])
+
+                # Select 100 prompts at random from test_df for FID calculation later
+                random.seed(args.dataset_split_seed)
+                # TEST_PROMPTS = random.sample(test_df["text"].tolist(), 100)
+                # Select a subset of 100 samples from the dataframe
+                K = args.num_FID_samples
+                test_df = test_df.sample(n=K, random_state=args.dataset_split_seed).reset_index(drop=True)
+                test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
+
 
 
                 print("Generating synthetic images using the fine-tuned model.")
-                num_images_per_prompt = 1
-                for epoch in range(num_images_per_prompt):
-                    for batch in test_dataloader:
-                        print("PROMPT: ", batch["text"])
-                        try:
-                            result = pipeline(
-                                prompt = batch["text"],
-                                height = args.resolution,
-                                width = args.resolution,
-                                guidance_scale=4,
-                                num_inference_steps=50
-                            )
-                        except:
-                            import pdb; pdb.set_trace()
-
-                        for i, img in enumerate(result.images):
-                            # all_real_paths.append(batch["path"][i])
-                            img_name = batch["path"][i].split("/")[-1].split(".")[0]
-                            img.save(os.path.join(args.synthetic_images_dir, img_name + ".jpg"))
                 
-                # Calculate the FID Score
-                print("Calculating the FID Score.")
-                # We need image tensors of both real and synthetic images
+                for i in range(len(test_df)):
+                    prompt = test_df['text'][i]
+                    path = test_df['path'][i]
+                    img_name = path.split("/")[-1].split(".")[0]
 
+                    print("PROMPT: ", prompt)
+                    
+                    result = pipeline(
+                        prompt = prompt,
+                        height = args.resolution,
+                        width = args.resolution,
+                        guidance_scale=4,
+                        num_inference_steps=50,
+                        num_images_per_prompt=1
+                    )
+
+                    for i, img in enumerate(result.images):
+                        img.save(os.path.join(args.synthetic_images_dir, img_name + ".jpg"))
+            
+                # Calculate the FID Score
+                # print("Calculating the FID Score.")
+                # We need image tensors of both real and synthetic images
+                real_image_paths = test_df['path'].tolist()
+                print("Preparing Real Image Tensors")
+                real_images = get_images_tensor_from_paths(real_image_paths)
+
+                # Get the synthetic image paths
+                print("Preparing Synthetic Image Tensors")
+                synthetic_image_paths = glob.glob(os.path.join(args.synthetic_images_dir, "*.jpg"))
+                synthetic_images = get_images_tensor_from_paths(synthetic_image_paths)
+
+                # Calculate the FID Score
+                fid_score = compute_fid(real_images, synthetic_images, device=accelerator.device)
+                print("FID SCORE: ", fid_score)
 
         end_time = time.time()
         print("Time taken for this HPO iteration: ", end_time - start_time)
@@ -1283,13 +1304,17 @@ def objective(trial):
             shutil.rmtree(args.synthetic_images_dir)
         except:
             pass
-            
-        # Pruning
-        trial.report(memorization_metric, epoch)
-        if trial.should_prune():
-            raise optuna.exceptions.TrialPruned()
 
-        return memorization_metric
+        # Pruning
+        if(not args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'): # Pruning NOT supported for Multi-objective HPO
+            trial.report(memorization_metric, epoch)
+            if trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
+
+        if(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'): # Multi-objective HPO
+            return memorization_metric, fid_score
+        else:
+            return memorization_metric
     else:
         print("Training is disabled. Exiting the training loop.")
 
@@ -1309,11 +1334,14 @@ if __name__ == "__main__":
         pruner = optuna.pruners.HyperbandPruner()
     else:
         raise NotImplementedError("Pruner not implemented yet.")
-    
-    direction = "minimize" # We want to minimize the memorization metric
 
     # Creating the Optuna study
-    study = optuna.create_study(direction=direction, pruner=pruner)
+    if(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'):
+        directions = ["minimize", "minimize"]   # We want to minimize both memorization metric and FID Score
+        study = optuna.create_study(directions=directions, pruner=pruner)
+    else:
+        direction = "minimize"
+        study = optuna.create_study(direction=direction, pruner=pruner)
 
     # Start the HPO Process
     study.optimize(objective, n_trials=args.num_trials, show_progress_bar=True)
@@ -1327,7 +1355,10 @@ if __name__ == "__main__":
     print("  Number of complete trials: ", len(complete_trials))
 
     print("Best trial:")
-    trial = study.best_trial
+    try:
+        trial = study.best_trial
+    except:
+        import pdb; pdb.set_trace()
 
     print("  Value: ", trial.value)
 
@@ -1342,7 +1373,7 @@ if __name__ == "__main__":
     # Save the best mask
     best_mask = np.array(best_mask).astype(np.int8)
     mask_savedir = os.path.join(
-        args.output_dir, "Saved Masks", args.unet_pretraining_type
+        args.output_dir, "Saved Masks"
     )
     os.makedirs(mask_savedir, exist_ok=True)
     print("Saving the best mask at: ", mask_savedir)

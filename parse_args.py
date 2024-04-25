@@ -444,7 +444,11 @@ def parse_args():
         "--disable_HPO_plotting",
         action="store_true",
     )
-
+    parser.add_argument(
+        "--num_FID_samples",
+        type=int,
+        default=100
+    )
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
