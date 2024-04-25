@@ -57,6 +57,15 @@ def disable_grad(module):
     for p in module.parameters():
         p.requires_grad = False
 
+def disable_grad_svdiff(module):
+    for n,p in module.named_parameters():
+        if("delta" in n):
+            p.requires_grad = False
+
+def disable_grad_difffit(module):
+    for n,p in module.named_parameters():
+        if("gamma_" in n):
+            p.requires_grad = False
 
 def set_module_grad_status(module, flag=False):
     if isinstance(module, list):
@@ -1183,3 +1192,124 @@ def load_text_encoder_for_difffit(
     del original_model
     torch.cuda.empty_cache()
     return model
+
+############################################ NEW FUNCTIONS FOR THE HPO ############################################
+
+##### 1. SV-DIFF
+
+def return_new_optim_params(unet):
+    optim_params_1d = []
+    optim_params = []
+    for n,p in unet.named_parameters():
+        if("delta" in n and p.requires_grad == True):
+            if "norm" in n:
+                optim_params_1d.append(p)
+            else:
+                optim_params.append(p)
+
+    return optim_params, optim_params_1d
+
+    
+def enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask, verbose=False):
+
+    '''
+    unet_with_svdiff: A U-Net model with SV-DIFF
+    binary_mask: A binary mask of length 12, where 0 means disable and 1 means enable
+    '''
+
+
+    attention_pattern = [0,0,1,1]
+    attn_pattern = [0,1]
+    
+    down_blocks = unet_with_svdiff.down_blocks
+
+    optim_params = []
+    optim_params_1d = []
+    
+    for i in range(len(binary_mask)):
+        # print("i: ", i)
+        mask_element = binary_mask[i]
+        block_idx = i//4
+        attention_idx = attention_pattern[i%4]
+        attn_idx = attn_pattern[i%2]
+
+        if(verbose):
+            print("Block: ", block_idx)
+            print("Attention: ", attention_idx)
+            print("attn idx: ", attn_idx)
+            print("\n")
+    
+        block = down_blocks[block_idx]
+        attention = block.attentions[attention_idx]
+        if(attn_idx == 0):
+            attn = attention.transformer_blocks[0].attn1
+        elif(attn_idx == 1):
+            attn = attention.transformer_blocks[0].attn2
+    
+        if(mask_element == 0):
+            disable_grad_svdiff(attn)
+            print("Disabling Block {} | attention {} | attn{}".format(block_idx, attention_idx, attn_idx))
+        # elif(mask_element == 1):
+        #     enable_grad(attn)
+        #     print("Enabling Block {} | attention {} | attn{}".format(block_idx, attention_idx, attn_idx))
+
+    # Get new optim_params and optim_params_1d
+    optim_params, optim_params_1d = return_new_optim_params(unet_with_svdiff)
+
+    return unet_with_svdiff, optim_params, optim_params_1d
+
+##### 2. DiffFit
+def enable_disable_difffit_with_mask(unet_with_difffit, binary_mask, verbose=False):
+    mid_block_mask = [binary_mask[6]]
+    down_block_mask = binary_mask[0:6]
+    up_block_mask = binary_mask[7:]
+
+    # Sanity Check
+    assert (len(mid_block_mask) + len(down_block_mask) + len(up_block_mask)) == len(binary_mask)
+
+    ################# DOWN BLOCKS #################
+    if(verbose):
+        print("Masking down blocks")
+    attention_pattern = [0,1]
+    for i in range(len(down_block_mask)):
+        block_idx = i//2
+        attention_idx = attention_pattern[i%2]
+        mask_element = down_block_mask[i]
+
+        if(verbose):
+            print("Block: ", block_idx)
+            print("Attention: ", attention_idx)
+    
+        if(mask_element == 0):
+            disable_grad_difffit(unet.down_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+        else:
+            continue # Elements are trainable by default
+
+    ################# MID BLOCK #################
+    if(verbose):
+        print("Masking Mid block")
+        
+    for i in range(len(mid_block_mask)):
+        mask_element = mid_block_mask[i]
+    
+        if(mask_element == 0):
+            disable_grad_difffit(unet.mid_block.attentions[0].transformer_blocks)
+
+    ################# UP BLOCKS #################
+    if(verbose):
+        print("Masking Up blocks")
+
+    attention_pattern = [0,1]
+    for i in range(len(up_block_mask)):
+        mask_element = up_block_mask[i] 
+        block_idx = (i//2)+1 # Indexing for up-blocks starts from 1
+        attention_idx = attention_pattern[i%2]
+        if(verbose):
+            print("Block: ", block_idx)
+            print("Attention: ", attention_idx)
+    
+        if(mask_element == 0):
+            disable_grad_difffit(unet.up_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+
+    return unet_with_difffit
+    

@@ -70,15 +70,27 @@ if is_wandb_available():
     import wandb
 
 
-# Will error if the minimal version of diffusers is not installed. Remove at your own risks.
-# check_min_version("0.19.0.dev0")
-
 logger = get_logger(__name__, log_level="INFO")
 
-DATASET_NAME_MAPPING = {
-    "lambdalabs/pokemon-blip-captions": ("image", "text"),
-}
+def create_opt_mask(trial, args):
 
+    
+    if(args.unet_pretraining_type == 'auto_svdiff'):
+        mask_length = 12
+    elif(args.unet_pretraining_type == 'auto_difffit'):
+        mask_length = 13
+    else:
+        raise NotImplementedError
+
+    print("Creating a binary mask of length: ", mask_length)
+    mask = np.zeros(mask_length, dtype=np.int8)
+
+    for i in range(mask_length):
+        mask[i] = trial.suggest_int("Mask Idx {}".format(i), 0, 1)
+
+    return mask
+
+    
 
 def make_image_grid(imgs, rows, cols):
     assert len(imgs) == rows * cols
@@ -362,7 +374,7 @@ def parse_args():
     parser.add_argument(
         "--pretrained_model_name_or_path",
         type=str,
-        default=None,
+        default="runwayml/stable-diffusion-v1-5",
         required=True,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
@@ -753,6 +765,8 @@ def parse_args():
             "loha",
             "lokr",
             "freeze",
+            "auto_svdiff",
+            "auto_difffit",
         ],
     )
 
@@ -981,21 +995,59 @@ def prepare_data(args, tokenizer):
 
     return train_dataset, val_dataset, test_dataset, train_dataloader, val_dataloader, test_dataloader
 
-def prepare_model(args):
+def prepare_model(args, binary_mask=None):
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="unet",
         revision=args.non_ema_revision,
     )
 
-    # Get U-Net according to the PEFT method: Only defining for full FT and DiffFit right now
-    unet = get_adapted_unet(
-            unet=unet, 
-            method=args.unet_pretraining_type,
-            args=args,
-            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-            # unet_block_idx=args.unet_block_idx,
-        )
+    if args.unet_pretraining_type == 'svdiff':
+        unet, optim_params, optim_params_1d  = get_adapted_unet(
+                unet=unet, 
+                method=args.unet_pretraining_type,
+                args=args,
+                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            )
+    elif args.unet_pretraining_type == 'auto_svdiff':
+
+        assert binary_mask is not None
+
+        # Apply SV-DIFF to U-Net
+        unet, optim_params, optim_params_1d  = get_adapted_unet(
+                unet=unet, 
+                method="svdiff",
+                args=args,
+                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            )
+
+        # Apply Mask to SV-DIFF U-Net
+        unet, optim_params, optim_params_1d = enable_disable_svdiff_with_mask(unet, binary_mask)
+
+    elif args.unet_pretraining_type == 'auto_difffit':
+
+        assert binary_mask is not None
+
+        # Apply DiffFit to U-Net
+        unet = get_adapted_unet(
+                unet=unet, 
+                method="difffit",
+                args=args,
+                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            )
+
+        # Apply Mask to DiffFit U-Net
+        unet = enable_disable_difffit_with_mask(unet_with_difffit, binary_mask, verbose=False)
+        
+    else:
+        # Full FT, N, B, A, DiffFit
+        unet = get_adapted_unet(
+                unet=unet, 
+                method=args.unet_pretraining_type,
+                args=args,
+                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+                # unet_block_idx=args.unet_block_idx,
+            )
     
     return unet
 
@@ -1161,7 +1213,10 @@ def objective(trial):
     #             # unet_block_idx=args.unet_block_idx,
     #         )
     print("UNET")
-    unet = prepare_model(args)
+    binary_mask = create_opt_mask(trial, args)
+    print("BINARY MASK: ", binary_mask)
+    
+    unet = prepare_model(args, binary_mask)
     tunable_params = check_tunable_params(unet, False)
     
     # Freeze vae and text_encoder
