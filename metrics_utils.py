@@ -101,3 +101,43 @@ def compute_fid(real_image_tensors, synth_image_tensors, device):
 
     return fid
 
+def pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score'):
+    
+    # Consider only completed trials
+    df = df[df['state'] == 'COMPLETE'].reset_index(drop=True)
+
+    # Sort the dataframe by x_column and y_column in ascending order
+    df_sorted = df.sort_values(by=[x_column, y_column], ascending=[True, True])
+    
+    # Initialize an empty list to store the Pareto frontier models
+    pareto_frontier_models = []
+    
+    # Initialize a variable to store the current minimum y value
+    min_y = float('inf')
+    
+    # Iterate through each row in the sorted dataframe
+    for index, row in df_sorted.iterrows():
+        # If the current y value is less than or equal to the current minimum y value
+        if row[y_column] <= min_y:
+            # Add the model to the Pareto frontier
+            pareto_frontier_models.append(row)
+            # Update the minimum y value
+            min_y = row[y_column]
+    
+    # Convert the list of models to a DataFrame
+    pareto_frontier_df = pd.DataFrame(pareto_frontier_models).reset_index(drop=True)
+    
+    # Plot the Pareto frontier
+    plt.figure(figsize=(10, 6))
+    plt.plot(df[x_column], df[y_column], 'bo', label='All Models')
+    plt.plot(pareto_frontier_df[x_column], pareto_frontier_df[y_column], 'ro', label='Pareto Frontier')
+    plt.xlabel('Memorization Meric')
+    plt.ylabel('FID Score')
+    plt.title('Pareto Frontier for Multi-Objective HPO')
+    plt.legend()
+    
+    # Save the plot as an image
+    plt.savefig(os.path.join(args.plots_save_dir, 'pareto_frontier.png'))
+
+    return pareto_frontier_df
+

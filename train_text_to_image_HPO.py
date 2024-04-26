@@ -80,16 +80,16 @@ def create_opt_mask(trial, args):
 
     
     if(args.unet_pretraining_type == 'auto_svdiff'):
-        mask_length = 12
+        args.mask_length = 13
     elif(args.unet_pretraining_type == 'auto_difffit'):
-        mask_length = 13
+        args.mask_length = 13
     else:
         raise NotImplementedError
 
-    print("Creating a binary mask of length: ", mask_length)
-    mask = np.zeros(mask_length, dtype=np.int8)
+    print("Creating a binary mask of length: ", args.mask_length)
+    mask = np.zeros(args.mask_length, dtype=np.int8)
 
-    for i in range(mask_length):
+    for i in range(args.mask_length):
         mask[i] = trial.suggest_int("Mask Idx {}".format(i), 0, 1)
 
     return mask
@@ -1344,19 +1344,23 @@ if __name__ == "__main__":
         )
     storage_dir = os.path.join(args.output_dir, "Optuna_StorageDB")
     os.makedirs(storage_dir, exist_ok=True)
-    study_name = args.unet_pretraining_type + "_" + args.objective_metric
-    study_name = os.path.join(storage_dir, study_name)
-    storage_name = "sqlite:///{}.db".format(study_name)
 
-    print("!!! Creating the study DB at {}".format(os.path.join(storage_dir, storage_name)))
+    if(not args.resume_study):
+        study_name = args.unet_pretraining_type + "_" + args.objective_metric
+        study_name = os.path.join(storage_dir, study_name)
+        storage_name = "sqlite:///{}.db".format(study_name)
+        print("!!! Creating the study DB at {}".format(os.path.join(storage_dir, storage_name)))
+    else:
+        print("!!! Resuming the study DB from the previous run.")
+        storage_name = "sqlite:///{}".format(args.resume_study)
 
     # Creating the Optuna study
     if(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'):
         directions = ["minimize", "minimize"]   # We want to minimize both memorization metric and FID Score
-        study = optuna.create_study(directions=directions, pruner=pruner, storage=storage_name)
+        study = optuna.create_study(directions=directions, pruner=pruner, storage=storage_name, load_if_exists=True)
     else:
         direction = "minimize"
-        study = optuna.create_study(direction=direction, pruner=pruner, storage=storage_name)
+        study = optuna.create_study(direction=direction, pruner=pruner, storage=storage_name, load_if_exists=True)
 
     # Start the HPO Process
     study.optimize(objective, n_trials=args.num_trials, show_progress_bar=True)
@@ -1368,6 +1372,11 @@ if __name__ == "__main__":
     print("  Number of finished trials: ", len(study.trials))
     print("  Number of pruned trials: ", len(pruned_trials))
     print("  Number of complete trials: ", len(complete_trials))
+
+    mask_savedir = os.path.join(
+            args.output_dir, "Saved Masks"
+        )
+    os.makedirs(mask_savedir, exist_ok=True)
 
     if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
         print("Best trial:")
@@ -1385,46 +1394,62 @@ if __name__ == "__main__":
         
         # Save the best mask
         best_mask = np.array(best_mask).astype(np.int8)
-        mask_savedir = os.path.join(
-            args.output_dir, "Saved Masks"
-        )
-        os.makedirs(mask_savedir, exist_ok=True)
+        
         print("Saving the best mask at: ", mask_savedir)
         mask_name = "best_mask.npy"
         np.save(os.path.join(mask_savedir, mask_name), best_mask)
-
-        # Creating Optuna study statistics dataframe
-        df = study.trials_dataframe()
-
-        stats_df_savedir = "hpo_stats"
-        stats_df_name = "hpo_stats.csv"
-
-        try:
-            df = df.drop(
-                [
-                    "datetime_start",
-                    "datetime_complete",
-                    "duration",
-                    #"system_attrs_completed_rung_0",
-                ],
-                axis=1,
-            )  # Drop unnecessary columns
-        except:
-            pass
-
-        os.makedirs(os.path.join(args.output_dir, stats_df_savedir), exist_ok=True)
-        df = df.rename(columns={"value": args.objective_metric})
-        df.to_csv(os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False)
-
-        args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
-        os.makedirs(args.plots_save_dir, exist_ok=True)
     else:
         trials = study.best_trials
 
-        # TODO: Figure out the logic for multi-objective HPO
-        import pdb; pdb.set_trace()
+        # TODO: Figure out the logic for multi-objective HPO -> Maybe decide using a pareto frontier
+        # import pdb; pdb.set_trace()
 
-    
+    # Creating Optuna study statistics dataframe
+    df = study.trials_dataframe()
+
+    stats_df_savedir = "hpo_stats"
+    stats_df_name = "hpo_stats.csv"
+
+    try:
+        df = df.drop(
+            [
+                "datetime_start",
+                "datetime_complete",
+                "duration",
+                #"system_attrs_completed_rung_0",
+            ],
+            axis=1,
+        )  # Drop unnecessary columns
+    except:
+        pass
+
+    os.makedirs(os.path.join(args.output_dir, stats_df_savedir), exist_ok=True)
+
+    # Create a directory to save the plots
+    args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
+    os.makedirs(args.plots_save_dir, exist_ok=True)
+
+    if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
+        df = df.rename(columns={"value": args.objective_metric})
+    else:
+        df = df.rename(columns={"values_0": "memorization_metric", "values_1": "FID_Score"})
+
+    df.to_csv(os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False)
+    pareto_frontier_df = pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score')
+    pareto_frontier_df.to_csv(os.path.join(args.output_dir, stats_df_savedir, "pareto_frontier.csv"), index=False)
+
+    # Iterate over the pareto frontier dataframe and save the masks
+    cols = ['params_Mask Idx {}'.format(i) for i in range(13)]
+    mask_df = pareto_frontier_df[cols]
+
+    for idx, row in mask_df.iterrows():
+        mask = row.values
+        mask = mask.astype(np.int8)
+        mask_name = "best_mask_{}.npy".format(idx)
+        np.save(os.path.join(mask_savedir, mask_name), mask)
+
+
+
     #################### Plotting ####################
 
     # 1. Parameter importance plots
