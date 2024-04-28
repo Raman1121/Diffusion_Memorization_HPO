@@ -1322,6 +1322,88 @@ def objective(trial):
         except:
             pass
 
+        ############################## Save the mask with the best trial as a safeguard
+
+        mask_savedir = os.path.join(
+            args.output_dir, "Saved Masks"
+        )
+        os.makedirs(mask_savedir, exist_ok=True)
+
+        args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
+        os.makedirs(args.plots_save_dir, exist_ok=True)
+
+        if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
+            print("Best trial:")
+            trial = study.best_trial
+
+            print("  Value: ", trial.value)
+
+            print("  Params: ")
+            best_mask = []
+            for key, value in trial.params.items():
+                print("    {}: {}".format(key, value))
+                if key == "lr":
+                    continue
+                best_mask.append(value)
+            
+            # Save the best mask
+            best_mask = np.array(best_mask).astype(np.int8)
+            
+            print("Saving the best mask at: ", mask_savedir)
+            mask_name = "best_mask.npy"
+            np.save(os.path.join(mask_savedir, mask_name), best_mask)
+        else:
+            trials = study.best_trials
+
+        # Creating Optuna study statistics dataframe
+        df = study.trials_dataframe()
+
+        if(len(df) > 1):                    # Run this only if there are more than 1 trials
+            stats_df_savedir = "hpo_stats"
+            stats_df_name = "hpo_stats.csv"
+
+            try:
+                df = df.drop(
+                    [
+                        "datetime_start",
+                        "datetime_complete",
+                        "duration",
+                        #"system_attrs_completed_rung_0",
+                    ],
+                    axis=1,
+                )  # Drop unnecessary columns
+            except:
+                pass
+
+            os.makedirs(os.path.join(args.output_dir, stats_df_savedir), exist_ok=True)
+
+            if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
+                df = df.rename(columns={"value": args.objective_metric})
+            else:
+                df = df.rename(columns={"values_0": "memorization_metric", "values_1": "FID_Score"})
+
+            df.to_csv(os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False)
+
+            try:
+                pareto_frontier_df = pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score')
+                pareto_frontier_df.to_csv(os.path.join(args.output_dir, stats_df_savedir, "pareto_frontier.csv"), index=False)
+            except:
+                import pdb; pdb.set_trace()
+
+            # Iterate over the pareto frontier dataframe and save the masks
+            cols = ['params_Mask Idx {}'.format(i) for i in range(args.mask_length)]
+            mask_df = pareto_frontier_df[cols]
+
+            for idx, row in mask_df.iterrows():
+                mask = row.values
+                mask = mask.astype(np.int8)
+                mask_name = "best_mask_{}.npy".format(idx)
+                np.save(os.path.join(mask_savedir, mask_name), mask)
+        else:
+            pass
+
+        
+
         # Pruning
         if(not args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'): # Pruning NOT supported for Multi-objective HPO
             trial.report(memorization_metric, epoch)
@@ -1355,43 +1437,7 @@ if __name__ == "__main__":
     # Creating a study DB
     optuna.logging.get_logger("optuna").addHandler(
             logging.StreamHandler(sys.stdout)
-        )
-    # if(args.optuna_storage_dir is not None):
-    #     storage_dir = os.path.join(args.optuna_storage_dir, "Optuna_StorageDB")
-    #     os.makedirs(storage_dir, exist_ok=True)
-    # else:
-    #     storage_dir = os.path.join(args.output_dir, "Optuna_StorageDB")
-    #     os.makedirs(storage_dir, exist_ok=True)
-
-    # if(not args.resume_study):
-    #     study_name = args.unet_pretraining_type + "_" + args.objective_metric
-    #     study_name = os.path.join(storage_dir, study_name)
-    #     storage_name = "sqlite:///{}.db".format(study_name)
-    #     print("!!! Creating the study DB at {}".format(os.path.join(storage_dir, storage_name)))
-    # else:
-    #     # storage_name = "sqlite:///{}.db".format(args.resume_study)
-    #     storage_name = args.resume_study
-    #     print("!!! Resuming the study DB from the previous run {}".format(storage_name))
-    
-    # if(args.resume_study is not None):
-    #     # splits = args.resume_study.split("/")
-    #     # _output_dir = splits[-4]
-    #     # _unet_pretraining_type = splits[-3]
-    #     # _db_folder = splits[-2]
-    #     # _db_name = splits[-1]
-    #     # _path = str(os.path.join(_output_dir, _unet_pretraining_type, _db_folder))
-    #     # storage_name = "sqlite:///" + os.path.join(_output_dir, _unet_pretraining_type, _db_folder, _db_name)
-    #     # print("!!! Resuming the study DB from the previous run {}".format(storage_name))
-    #     study_name = args.unet_pretraining_type + "_" + args.objective_metric
-    #     study_name = os.path.join(storage_dir, study_name)
-    #     storage_name = "sqlite:///{}.db".format(study_name)
-    #     print("!!! Resuming the study DB from the previous run {}".format(os.path.join(storage_dir, storage_name)))
-    # else:
-    #     study_name = args.unet_pretraining_type + "_" + args.objective_metric
-    #     study_name = os.path.join(storage_dir, study_name)
-    #     storage_name = "sqlite:///{}.db".format(study_name)
-    #     print("!!! Creating the study DB at {}".format(os.path.join(storage_dir, storage_name)))
-
+    )
 
     # Creating the Optuna study
     # storage_name = "sqlite:///{}.db".format(args.optuna_storage_name)
@@ -1441,9 +1487,6 @@ if __name__ == "__main__":
     else:
         trials = study.best_trials
 
-        # TODO: Figure out the logic for multi-objective HPO -> Maybe decide using a pareto frontier
-        # import pdb; pdb.set_trace()
-
     # Creating Optuna study statistics dataframe
     df = study.trials_dataframe()
 
@@ -1466,8 +1509,8 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(args.output_dir, stats_df_savedir), exist_ok=True)
 
     # Create a directory to save the plots
-    args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
-    os.makedirs(args.plots_save_dir, exist_ok=True)
+    # args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
+    # os.makedirs(args.plots_save_dir, exist_ok=True)
 
     if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
         df = df.rename(columns={"value": args.objective_metric})
