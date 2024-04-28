@@ -101,10 +101,11 @@ def compute_fid(real_image_tensors, synth_image_tensors, device):
 
     return fid
 
-def pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score'):
+def pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score', marker_size=10):
     
     # Consider only completed trials
     df = df[df['state'] == 'COMPLETE'].reset_index(drop=True)
+    df['number'] = df['number'].apply(lambda x: 'Trial {}'.format(x))
 
     # Sort the dataframe by x_column and y_column in ascending order
     df_sorted = df.sort_values(by=[x_column, y_column], ascending=[True, True])
@@ -129,8 +130,13 @@ def pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Scor
     
     # Plot the Pareto frontier
     plt.figure(figsize=(10, 6))
-    plt.plot(df[x_column], df[y_column], 'bo', label='All Models')
-    plt.plot(pareto_frontier_df[x_column], pareto_frontier_df[y_column], 'ro', label='Pareto Frontier')
+    plt.plot(df[x_column], df[y_column], 'bo', label='All Models', marker_size=marker_size)
+    plt.plot(pareto_frontier_df[x_column], pareto_frontier_df[y_column], 'ro', label='Pareto Frontier', marker_size=marker_size)
+
+    # Add labels for each entry
+    for index, row in df.iterrows():
+        plt.text(row[x_column], row[y_column], str(row["number"]), fontsize=10)
+
     plt.xlabel('Memorization Meric')
     plt.ylabel('FID Score')
     plt.title('Pareto Frontier for Multi-Objective HPO')

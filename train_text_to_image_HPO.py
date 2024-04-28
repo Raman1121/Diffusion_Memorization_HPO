@@ -83,6 +83,8 @@ def create_opt_mask(trial, args):
         args.mask_length = 13
     elif(args.unet_pretraining_type == 'auto_difffit'):
         args.mask_length = 13
+    elif(args.unet_pretraining_type == 'auto_attention'):
+        args.mask_length = 16
     else:
         raise NotImplementedError
 
@@ -602,6 +604,17 @@ def prepare_model(args, binary_mask=None):
 
         # Apply Mask to DiffFit U-Net
         unet = enable_disable_difffit_with_mask(unet_with_difffit, binary_mask, verbose=False)
+
+    elif args.unet_pretraining_type == 'auto_attention':
+        unet = get_adapted_unet(
+                unet=unet, 
+                method='attention',
+                args=args,
+                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            )
+        
+        # Apply Mask to Attention U-Net
+        unet = enable_disable_attention_with_mask(unet, binary_mask)
         
     else:
         # Full FT, N, B, A, DiffFit
@@ -1239,7 +1252,7 @@ def objective(trial):
                 pipeline = StableDiffusionPipeline.from_pretrained(
                         args.pretrained_model_name_or_path,
                         text_encoder=text_encoder,
-                        vae=vae.to(torch.float32),
+                        vae=vae.to(torch.float32),  # Keeping VAE in float32 allows using mixed_precision=fp16 for training
                         unet=unet,
                         revision=args.revision,
                         safety_checker=None,

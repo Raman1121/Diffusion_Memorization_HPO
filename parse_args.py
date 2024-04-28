@@ -405,6 +405,7 @@ def parse_args():
             "freeze",
             "auto_svdiff",
             "auto_difffit",
+            "auto_attention",
         ],
     )
 
@@ -454,6 +455,18 @@ def parse_args():
         type=str,
         default=None,
         help="The name of the study to resume.",
+    )
+    parser.add_argument(
+        "--optuna_storage_name",
+        type=str,
+        default=None,
+        help="Optuna study DB name. Multiple studies can share the same DB.",
+    )
+    parser.add_argument(
+        "--optuna_study_name",
+        type=str,
+        default=None,
+        help="Optuna study name. Multiple studies can share the same DB.",
     )
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))

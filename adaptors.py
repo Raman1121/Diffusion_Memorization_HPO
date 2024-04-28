@@ -67,6 +67,11 @@ def disable_grad_difffit(module):
         if("gamma_" in n):
             p.requires_grad = False
 
+def disable_grad_attention(module):
+    for n,p in module.named_parameters():
+        if("attn" in n):
+            p.requires_grad = False
+
 def set_module_grad_status(module, flag=False):
     if isinstance(module, list):
         print("list", module)
@@ -1311,3 +1316,58 @@ def enable_disable_difffit_with_mask(unet, binary_mask, verbose=False):
 
     return unet
     
+def enable_disable_attention_with_mask(unet, binary_mask, verbose=False):
+    mid_block_mask = [binary_mask[6]]
+    down_block_mask = binary_mask[0:6]
+    up_block_mask = binary_mask[7:]
+
+    
+
+    # Sanity Check
+    assert (len(mid_block_mask) + len(down_block_mask) + len(up_block_mask)) == len(binary_mask)
+
+    ################# DOWN BLOCKS #################
+    if(verbose):
+        print("Masking down blocks")
+    attention_pattern = [0,1]
+    for i in range(len(down_block_mask)):
+        block_idx = i//2
+        attention_idx = attention_pattern[i%2]
+        mask_element = down_block_mask[i]
+
+        if(verbose):
+            print("Block: ", block_idx)
+            print("Attention: ", attention_idx)
+    
+        if(mask_element == 0):
+            disable_grad_attention(unet.down_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+        else:
+            continue # Elements are trainable by default
+
+    ################# MID BLOCK #################
+    if(verbose):
+        print("Masking Mid block")
+        
+    for i in range(len(mid_block_mask)):
+        mask_element = mid_block_mask[i]
+    
+        if(mask_element == 0):
+            disable_grad_attention(unet.mid_block.attentions[0].transformer_blocks)
+
+    ################# UP BLOCKS #################
+    if(verbose):
+        print("Masking Up blocks")
+
+    attention_pattern = [0,1,2]
+    for i in range(len(up_block_mask)):
+        mask_element = up_block_mask[i] 
+        block_idx = (i//3)+1 # Indexing for up-blocks starts from 1
+        attention_idx = attention_pattern[i%3]
+        if(verbose):
+            print("Block: ", block_idx)
+            print("Attention: ", attention_idx)
+    
+        if(mask_element == 0):
+            disable_grad_attention(unet.up_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+
+    return unet
