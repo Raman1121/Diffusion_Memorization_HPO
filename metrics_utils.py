@@ -130,8 +130,8 @@ def pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Scor
     
     # Plot the Pareto frontier
     plt.figure(figsize=(10, 6))
-    plt.plot(df[x_column], df[y_column], 'bo', label='All Models', marker_size=marker_size)
-    plt.plot(pareto_frontier_df[x_column], pareto_frontier_df[y_column], 'ro', label='Pareto Frontier', marker_size=marker_size)
+    plt.plot(df[x_column], df[y_column], 'bo', label='All Models', markersize=marker_size)
+    plt.plot(pareto_frontier_df[x_column], pareto_frontier_df[y_column], 'ro', label='Pareto Frontier', markersize=marker_size)
 
     # Add labels for each entry
     for index, row in df.iterrows():
