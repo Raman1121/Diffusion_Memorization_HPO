@@ -1239,13 +1239,14 @@ def objective(trial):
                 pipeline = StableDiffusionPipeline.from_pretrained(
                         args.pretrained_model_name_or_path,
                         text_encoder=text_encoder,
-                        vae=vae,
+                        vae=vae.to(torch.float32),
                         unet=unet,
                         revision=args.revision,
                         safety_checker=None,
                     )
                 pipeline = pipeline.to(accelerator.device)
                 pipeline.torch_dtype = weight_dtype
+                
                 # pipeline.save_pretrained(args.output_dir)
 
                 # Generate images
@@ -1342,25 +1343,51 @@ if __name__ == "__main__":
     optuna.logging.get_logger("optuna").addHandler(
             logging.StreamHandler(sys.stdout)
         )
-    storage_dir = os.path.join(args.output_dir, "Optuna_StorageDB")
-    os.makedirs(storage_dir, exist_ok=True)
+    # if(args.optuna_storage_dir is not None):
+    #     storage_dir = os.path.join(args.optuna_storage_dir, "Optuna_StorageDB")
+    #     os.makedirs(storage_dir, exist_ok=True)
+    # else:
+    #     storage_dir = os.path.join(args.output_dir, "Optuna_StorageDB")
+    #     os.makedirs(storage_dir, exist_ok=True)
 
-    if(not args.resume_study):
-        study_name = args.unet_pretraining_type + "_" + args.objective_metric
-        study_name = os.path.join(storage_dir, study_name)
-        storage_name = "sqlite:///{}.db".format(study_name)
-        print("!!! Creating the study DB at {}".format(os.path.join(storage_dir, storage_name)))
-    else:
-        print("!!! Resuming the study DB from the previous run.")
-        storage_name = "sqlite:///{}".format(args.resume_study)
+    # if(not args.resume_study):
+    #     study_name = args.unet_pretraining_type + "_" + args.objective_metric
+    #     study_name = os.path.join(storage_dir, study_name)
+    #     storage_name = "sqlite:///{}.db".format(study_name)
+    #     print("!!! Creating the study DB at {}".format(os.path.join(storage_dir, storage_name)))
+    # else:
+    #     # storage_name = "sqlite:///{}.db".format(args.resume_study)
+    #     storage_name = args.resume_study
+    #     print("!!! Resuming the study DB from the previous run {}".format(storage_name))
+    
+    # if(args.resume_study is not None):
+    #     # splits = args.resume_study.split("/")
+    #     # _output_dir = splits[-4]
+    #     # _unet_pretraining_type = splits[-3]
+    #     # _db_folder = splits[-2]
+    #     # _db_name = splits[-1]
+    #     # _path = str(os.path.join(_output_dir, _unet_pretraining_type, _db_folder))
+    #     # storage_name = "sqlite:///" + os.path.join(_output_dir, _unet_pretraining_type, _db_folder, _db_name)
+    #     # print("!!! Resuming the study DB from the previous run {}".format(storage_name))
+    #     study_name = args.unet_pretraining_type + "_" + args.objective_metric
+    #     study_name = os.path.join(storage_dir, study_name)
+    #     storage_name = "sqlite:///{}.db".format(study_name)
+    #     print("!!! Resuming the study DB from the previous run {}".format(os.path.join(storage_dir, storage_name)))
+    # else:
+    #     study_name = args.unet_pretraining_type + "_" + args.objective_metric
+    #     study_name = os.path.join(storage_dir, study_name)
+    #     storage_name = "sqlite:///{}.db".format(study_name)
+    #     print("!!! Creating the study DB at {}".format(os.path.join(storage_dir, storage_name)))
+
 
     # Creating the Optuna study
+    # storage_name = "sqlite:///{}.db".format(args.optuna_storage_name)
     if(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'):
         directions = ["minimize", "minimize"]   # We want to minimize both memorization metric and FID Score
-        study = optuna.create_study(directions=directions, pruner=pruner, storage=storage_name, load_if_exists=True)
+        study = optuna.create_study(directions=directions, pruner=pruner, study_name=args.optuna_study_name, storage=args.optuna_storage_name, load_if_exists=True)
     else:
         direction = "minimize"
-        study = optuna.create_study(direction=direction, pruner=pruner, storage=storage_name, load_if_exists=True)
+        study = optuna.create_study(direction=direction, pruner=pruner, study_name=args.optuna_study_name, storage=args.optuna_storage_name, load_if_exists=True)
 
     # Start the HPO Process
     study.optimize(objective, n_trials=args.num_trials, show_progress_bar=True)
