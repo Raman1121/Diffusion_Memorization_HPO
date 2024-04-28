@@ -665,6 +665,9 @@ def prepare_optimizer(args, parameters):
 def objective(trial):
 
     start_time = time.time()
+
+    args.learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
+    print("Suggested learning rate: ", args.learning_rate)
     
     if args.non_ema_revision is not None:
         deprecate(
