@@ -1327,85 +1327,99 @@ def objective(trial):
 
         ############################## Save the mask with the best trial as a safeguard
 
-        mask_savedir = os.path.join(
-            args.output_dir, "Saved Masks"
-        )
-        os.makedirs(mask_savedir, exist_ok=True)
+        # mask_savedir = os.path.join(
+        #     args.output_dir, "Saved Masks"
+        # )
+        # os.makedirs(mask_savedir, exist_ok=True)
 
-        args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
-        os.makedirs(args.plots_save_dir, exist_ok=True)
+        # args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
+        # os.makedirs(args.plots_save_dir, exist_ok=True)
 
-        if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
-            print("Best trial:")
-            trial = study.best_trial
+        # if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
+        #     print("Best trial:")
+        #     trial = study.best_trial
 
-            print("  Value: ", trial.value)
+        #     print("  Value: ", trial.value)
 
-            print("  Params: ")
-            best_mask = []
-            for key, value in trial.params.items():
-                print("    {}: {}".format(key, value))
-                if key == "lr":
-                    continue
-                best_mask.append(value)
+        #     print("  Params: ")
+        #     best_mask = []
+        #     for key, value in trial.params.items():
+        #         print("    {}: {}".format(key, value))
+        #         if key == "lr":
+        #             continue
+        #         best_mask.append(value)
             
-            # Save the best mask
-            best_mask = np.array(best_mask).astype(np.int8)
+        #     # Save the best mask
+        #     best_mask = np.array(best_mask).astype(np.int8)
             
-            print("Saving the best mask at: ", mask_savedir)
-            mask_name = "best_mask.npy"
-            np.save(os.path.join(mask_savedir, mask_name), best_mask)
-        else:
-            trials = study.best_trials
+        #     print("Saving the best mask at: ", mask_savedir)
+        #     mask_name = "best_mask.npy"
+        #     np.save(os.path.join(mask_savedir, mask_name), best_mask)
+        # else:
+        #     trials = study.best_trials
 
-        # Creating Optuna study statistics dataframe
-        df = study.trials_dataframe()
+        # # Creating Optuna study statistics dataframe
+        # df = study.trials_dataframe()
 
-        if(len(df) > 1):                    # Run this only if there are more than 1 trials
-            stats_df_savedir = "hpo_stats"
-            stats_df_name = "hpo_stats.csv"
+        # if(len(df) > 1):                    # Run this only if there are more than 1 trials
+        #     stats_df_savedir = "hpo_stats"
+        #     stats_df_name = "hpo_stats.csv"
 
-            try:
-                df = df.drop(
-                    [
-                        "datetime_start",
-                        "datetime_complete",
-                        "duration",
-                        #"system_attrs_completed_rung_0",
-                    ],
-                    axis=1,
-                )  # Drop unnecessary columns
-            except:
-                pass
+        #     try:
+        #         df = df.drop(
+        #             [
+        #                 "datetime_start",
+        #                 "datetime_complete",
+        #                 "duration",
+        #                 #"system_attrs_completed_rung_0",
+        #             ],
+        #             axis=1,
+        #         )  # Drop unnecessary columns
+        #     except:
+        #         pass
 
-            os.makedirs(os.path.join(args.output_dir, stats_df_savedir), exist_ok=True)
+        #     os.makedirs(os.path.join(args.output_dir, stats_df_savedir), exist_ok=True)
 
-            if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
-                df = df.rename(columns={"value": args.objective_metric})
-            else:
-                df = df.rename(columns={"values_0": "memorization_metric", "values_1": "FID_Score"})
+        #     if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
+        #         df = df.rename(columns={"value": args.objective_metric})
+        #     else:
+        #         df = df.rename(columns={"values_0": "memorization_metric", "values_1": "FID_Score"})
 
-            df.to_csv(os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False)
+        #     df.to_csv(os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False)
 
-            try:
-                pareto_frontier_df = pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score')
-                pareto_frontier_df.to_csv(os.path.join(args.output_dir, stats_df_savedir, "pareto_frontier.csv"), index=False)
-            except:
-                import pdb; pdb.set_trace()
+        #     try:
+        #         pareto_frontier_df = pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score')
+        #         pareto_frontier_df.to_csv(os.path.join(args.output_dir, stats_df_savedir, "pareto_frontier.csv"), index=False)
+        #     except:
+        #         import pdb; pdb.set_trace()
 
-            # Iterate over the pareto frontier dataframe and save the masks
-            cols = ['params_Mask Idx {}'.format(i) for i in range(args.mask_length)]
-            mask_df = pareto_frontier_df[cols]
+        #     # Iterate over the pareto frontier dataframe and save the masks
+        #     cols = ['params_Mask Idx {}'.format(i) for i in range(args.mask_length)]
+        #     mask_df = pareto_frontier_df[cols]
 
-            for idx, row in mask_df.iterrows():
-                mask = row.values
-                mask = mask.astype(np.int8)
-                mask_name = "best_mask_{}.npy".format(idx)
-                np.save(os.path.join(mask_savedir, mask_name), mask)
-        else:
-            pass
+        #     for idx, row in mask_df.iterrows():
+        #         mask = row.values
+        #         mask = mask.astype(np.int8)
+        #         mask_name = "best_mask_{}.npy".format(idx)
+        #         np.save(os.path.join(mask_savedir, mask_name), mask)
+        # else:
+        #     pass
 
+        logs_savedir = os.path.join(args.output_dir, "logs")
+        os.makedirs(logs_savedir, exist_ok=True)
+
+        try:
+            logs_df = pd.read_csv(os.path.join(logs_savedir, "logs.csv"))
+        except:
+
+            cols = ['params_Mask Idx {}'.format(i) for i in range(args.mask_length)] + ['learning_rate' ,'memorization_metric', 'FID_Score', 'time_taken']
+            logs_df = pd.DataFrame(columns=cols)
         
+        # Add to logs df
+        _bm = [int(i) for i in binary_mask]
+        _row = list(_bm) + [args.learning_rate, memorization_metric, fid_score, end_time - start_time]
+        logs_df.loc[len(logs_df)] = _row
+        logs_df.to_csv(os.path.join(logs_savedir, "logs.csv"), index=False)
 
         # Pruning
         if(not args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'): # Pruning NOT supported for Multi-objective HPO
@@ -1512,8 +1526,8 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(args.output_dir, stats_df_savedir), exist_ok=True)
 
     # Create a directory to save the plots
-    # args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
-    # os.makedirs(args.plots_save_dir, exist_ok=True)
+    args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
+    os.makedirs(args.plots_save_dir, exist_ok=True)
 
     if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
         df = df.rename(columns={"value": args.objective_metric})
