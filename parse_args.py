@@ -13,7 +13,6 @@ def parse_args():
         "--pretrained_model_name_or_path",
         type=str,
         default="runwayml/stable-diffusion-v1-5",
-        required=True,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
     parser.add_argument(
@@ -421,12 +420,16 @@ def parse_args():
         help="Number of times to repeat a dataset for deliberate memorization",
     )
 
-    # HPO Args
+    ########################## HPO Args ##########################
+    parser.add_argument(
+        "--binary_mask_path",
+        type=str,
+        default=None,
+    )
     parser.add_argument(
         "--objective_metric",
         type=str,
         default=None,
-        required=True,
         choices=[
             "max_norm",
             "avg_norm",
@@ -468,6 +471,28 @@ def parse_args():
         default=None,
         help="Optuna study name. Multiple studies can share the same DB.",
     )
+
+    ########################## Synthetic Data Generation Args ##########################
+
+    parser.add_argument(
+        "--run_eval_on",
+        type=str,
+        required=True,
+        choices=["train", "test"],
+    )
+    parser.add_argument(
+        "--num_images_to_generate",
+        type=int,
+        default=1000,
+    )
+    parser.add_argument(
+        "--images_per_prompt",
+        type=int,
+        default=1,
+    )
+
+
+
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:

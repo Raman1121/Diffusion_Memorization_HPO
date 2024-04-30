@@ -606,6 +606,9 @@ def prepare_model(args, binary_mask=None):
         unet = enable_disable_difffit_with_mask(unet_with_difffit, binary_mask, verbose=False)
 
     elif args.unet_pretraining_type == 'auto_attention':
+
+        assert binary_mask is not None
+        
         unet = get_adapted_unet(
                 unet=unet, 
                 method='attention',
