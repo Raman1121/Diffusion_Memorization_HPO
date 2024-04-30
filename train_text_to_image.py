@@ -345,8 +345,9 @@ def main():
     )
 
     # Load the Binary Mask here
-    binary_mask = np.load(args.binary_mask_path)
-    print("Binary Mask: ", binary_mask)
+    if(args.binary_mask_path is not None):
+        binary_mask = np.load(args.binary_mask_path)
+        print("Binary Mask: ", binary_mask)
 
     # TODO: Add the UNet PEFT Logic here
     if args.unet_pretraining_type == "lorav2":

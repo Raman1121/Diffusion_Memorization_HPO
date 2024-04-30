@@ -477,7 +477,6 @@ def parse_args():
     parser.add_argument(
         "--run_eval_on",
         type=str,
-        required=True,
         choices=["train", "test"],
     )
     parser.add_argument(

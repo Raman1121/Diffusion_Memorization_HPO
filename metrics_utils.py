@@ -8,6 +8,8 @@ import torch.nn as nn
 import torchxrayvision as xrv
 import random
 from torchmetrics.image.fid import FrechetInceptionDistance
+from torchmetrics.image.mifid import MemorizationInformedFrechetInceptionDistance
+
 
 
 def get_images_tensor_from_paths(image_paths):
@@ -88,6 +90,23 @@ def fid_metric(real_images, synthetic_images, features=64, device=None, encoder_
     
     return fid.compute().cpu().item()
 
+# From: https://torchmetrics.readthedocs.io/en/stable/image/mifid.html
+def mifid_metric(real_images, synthetic_images, features=64, device=None, encoder_type='mimic_densenet'):
+
+    if(isinstance(features, int)):
+        print("Using InceptionV3 feature Layer {}".format(features))
+    elif(isinstance(features, nn.Module)):
+        print("Using a custom feature extractor for MIFID calculation")
+    else:
+        print("Invalid features provided")
+        return np.nan
+
+    mifid = MemorizationInformedFrechetInceptionDistance(feature=features).to(device)
+    mifid.update(real_images, real=True)
+    mifid.update(synthetic_images, real=False)
+    
+    return mifid.compute().cpu().item()
+
 def compute_fid(real_image_tensors, synth_image_tensors, device):
     real_image_tensors = real_image_tensors.to(torch.float)
     synth_image_tensors = synth_image_tensors.to(torch.float)
@@ -100,6 +119,21 @@ def compute_fid(real_image_tensors, synth_image_tensors, device):
     fid = fid_metric(real_image_tensors, synth_image_tensors, features=feature_extractor, device=device)
 
     return fid
+
+def compute_mifid(real_image_tensors, synth_image_tensors, device):
+    real_image_tensors = real_image_tensors.to(torch.float)
+    synth_image_tensors = synth_image_tensors.to(torch.float)
+    real_image_tensors = real_image_tensors.to(device)
+    synth_image_tensors = synth_image_tensors.to(device)
+
+    model = xrv.models.DenseNet(weights="densenet121-res224-mimic_ch").to(device)
+    feature_extractor = FeatureExtractor(model, model_type='mimic_densenet')
+
+    mifid = mifid_metric(real_image_tensors, synth_image_tensors, features=feature_extractor, device=device)
+
+    return mifid
+
+
 
 def pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score', marker_size=10):
     

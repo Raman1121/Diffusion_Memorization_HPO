@@ -85,15 +85,15 @@ class TextDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         return dict(self.df.iloc[idx])
 
-def generate_synthetic_dataset(args, df):
+def generate_synthetic_dataset(args, df, sd_pipeline):
     
     
     if not os.path.isdir(args["save_images_path"]):
         os.makedirs(args["save_images_path"])
 
-    sd_pipeline = loadSDModel(
-        args, exp_path=args["output_dir"], cuda_device=args["cuda_device"]
-    )
+    # sd_pipeline = loadSDModel(
+    #     args, exp_path=args["output_dir"], cuda_device=args["cuda_device"]
+    # )
 
     dataset = TextDataset(
         df,
@@ -145,6 +145,10 @@ def generate_and_eval(args):
     else:
         raise ValueError("Invalid value for run_eval_on. Select from 'train' or 'test' only.")
 
+    sd_pipeline = loadSDModel(
+        args, exp_path=args["output_dir"], cuda_device=args["cuda_device"]
+    )
+
     # TODO: Add the logic of running generation and evaluation across different seeds here
 
     GLOBAL_FID = []
@@ -163,7 +167,7 @@ def generate_and_eval(args):
 
         # STEP 1: Generate synthetic images and save them
         print("Generating Synthetic Images")
-        generate_synthetic_dataset(args, df)
+        generate_synthetic_dataset(args, df, sd_pipeline)
 
         # STEP 2: Calculate metrics
 
@@ -173,19 +177,25 @@ def generate_and_eval(args):
         real_images = get_images_tensor_from_paths(real_image_paths)
 
         # Preparing Synthetic Image tensors
-        # try:
         synthetic_image_paths = glob.glob(os.path.join(args["save_images_path"], "*.jpg"))
-        # except:
-            # import pdb; pdb.set_trace()
             
         print("{} Synthetic Images found".format(len(synthetic_image_paths)))
         print("Preparing Synthetic Image Tensors")
         synthetic_images = get_images_tensor_from_paths(synthetic_image_paths)
 
+        # Calculate the MIFID Score
+        if(args["run_eval_on"] == 'train'):
+            # TODO: Compute MIFID HERE
+            mifid_score = compute_mifid(real_images, synthetic_images, device='cuda:0')
+            GLOBAL_MIFID.append(mifid_score)
+            print("MIFID SCORE is {} for Seed {}".format(mifid_score, seed))
+        
         # Calculate the FID Score
-        fid_score = compute_fid(real_images, synthetic_images, device='cuda:0')
-        GLOBAL_FID.append(fid_score)
-        print("FID SCORE is {} for Seed {}".format(fid_score, seed))
+        elif(args["run_eval_on"] == 'test'):
+            fid_score = compute_fid(real_images, synthetic_images, device='cuda:0')
+            GLOBAL_FID.append(fid_score)
+            print("FID SCORE is {} for Seed {}".format(fid_score, seed))
+            
         print("\n")
         print("\n")
 
@@ -228,6 +238,7 @@ if __name__ == "__main__":
             config.unet_pretraining_type
         )
     config.results_savedir = os.path.join(config.output_dir, "results")
+    os.makedirs(config.results_savedir, exist_ok=True)
     
     config.cuda_device = 0
     config.train_batch_size = 128   # Works when the pipeline dtype is fp16
