@@ -15,6 +15,7 @@ import yaml
 import glob
 import shutil
 from metrics_utils import *
+from adaptors import check_tunable_params
 from torchmetrics.image.fid import FrechetInceptionDistance
 import torchxrayvision as xrv
 import torchvision
@@ -72,7 +73,9 @@ def loadSDModel(args, exp_path, cuda_device):
     pipe.safety_checker = None
     pipe.requires_safety_checker = False
 
-    return pipe
+    tunable_params = check_tunable_params(pipe.unet, False)
+
+    return pipe, tunable_params
 
 class TextDataset(torch.utils.data.Dataset):
     def __init__(self, df):
@@ -145,7 +148,7 @@ def generate_and_eval(args):
     else:
         raise ValueError("Invalid value for run_eval_on. Select from 'train' or 'test' only.")
 
-    sd_pipeline = loadSDModel(
+    sd_pipeline, tunable_params = loadSDModel(
         args, exp_path=args["output_dir"], cuda_device=args["cuda_device"]
     )
 
@@ -153,8 +156,8 @@ def generate_and_eval(args):
 
     GLOBAL_FID = []
     GLOBAL_MIFID = []
-    SEEDS = [42, 1234, 5678, 1111]
-    # SEEDS = [42]
+    # SEEDS = [42, 1234, 5678, 1111]
+    SEEDS = [42]
 
     for seed in SEEDS:
         random.seed(seed)
@@ -195,7 +198,7 @@ def generate_and_eval(args):
             fid_score = compute_fid(real_images, synthetic_images, device='cuda:0')
             GLOBAL_FID.append(fid_score)
             print("FID SCORE is {} for Seed {}".format(fid_score, seed))
-            
+
         print("\n")
         print("\n")
 
@@ -206,10 +209,10 @@ def generate_and_eval(args):
         try:
             results_df = pd.read_csv("results_MIFID.csv")
         except:
-            results_df = pd.DataFrame(columns=["FT Strategy", "MIFID", "Standard Dev"])
+            results_df = pd.DataFrame(columns=["FT Strategy", "Tunable Params", "MIFID", "Standard Dev"])
 
         # Add the results to the results dataframe
-        _row = [args["unet_pretraining_type"], np.mean(GLOBAL_MIFID), np.std(GLOBAL_MIFID)]
+        _row = [args["unet_pretraining_type"], tunable_params, np.mean(GLOBAL_MIFID), np.std(GLOBAL_MIFID)]
         results_df.loc[len(results_df)] = _row
 
         results_df.to_csv(os.path.join(args["results_savedir"], "results_MIFID.csv"), index=False)
@@ -218,10 +221,10 @@ def generate_and_eval(args):
         try:
             results_df = pd.read_csv("results_FID.csv")
         except:
-            results_df = pd.DataFrame(columns=["FT Strategy", "FID", "Standard Dev"])
+            results_df = pd.DataFrame(columns=["FT Strategy", "Tunable Params", "FID", "Standard Dev"])
 
         # Add the results to the results dataframe
-        _row = [args["unet_pretraining_type"], np.mean(GLOBAL_FID), np.std(GLOBAL_FID)]
+        _row = [args["unet_pretraining_type"], tunable_params, np.mean(GLOBAL_FID), np.std(GLOBAL_FID)]
         results_df.loc[len(results_df)] = _row
 
         results_df.to_csv(os.path.join(args["results_savedir"], "results_FID.csv"), index=False)
