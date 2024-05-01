@@ -1313,34 +1313,89 @@ def objective(trial):
                 # Select a subset of 100 samples from the dataframe
                 K = args.num_FID_samples
                 test_df = test_df.sample(n=K, random_state=args.dataset_split_seed).reset_index(drop=True)
-                test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
+                # test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
 
+                test_transforms = transforms.Compose(
+                    [
+                        transforms.Resize(
+                            args.resolution, interpolation=transforms.InterpolationMode.BILINEAR
+                        ),
+                        (
+                            transforms.CenterCrop(args.resolution)
+                            if args.center_crop
+                            else transforms.RandomCrop(args.resolution)
+                        ),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0.5], [0.5]),
+                    ]
+                )
+            
+                # Create dataset from test_df
+                test_dataset = MimicCXRDataset(
+                    csv_file=test_df,   
+                    images_dir=args.images_path_train,
+                    tokenizer=tokenizer,
+                    transform=test_transforms,
+                    seed=args.dataset_split_seed,
+                    dataset_size_ratio=1.0,         # We have already done the splitting
+                    use_real_images=True,
+                )
+
+                # Create Dataloader
+                test_dataloader = torch.utils.data.DataLoader(
+                    test_dataset,
+                    batch_size=64,
+                    num_workers=16,
+                    drop_last=False,
+                    shuffle=False,
+                )
 
 
                 print("Generating synthetic images using the fine-tuned model.")
                 
-                for i in range(len(test_df)):
-                    prompt = test_df['text'][i]
-                    path = test_df['path'][i]
-                    img_name = path.split("/")[-1].split(".")[0]
 
-                    print("PROMPT: ", prompt)
-                    
+                FID_START_TIME = time.time()
+                idxx = 0
+                for batch in test_dataloader:
                     result = pipeline(
-                        prompt = prompt,
-                        height = args.resolution,
-                        width = args.resolution,
+                        prompt=batch["text"],
+                        height=args.resolution,
+                        width=args.resolution,
                         guidance_scale=4,
                         num_inference_steps=50,
                         num_images_per_prompt=1
                     )
 
                     for i, img in enumerate(result.images):
+                        img_name = 'image_{}'.format(i+idxx)
                         img.save(os.path.join(args.synthetic_images_dir, img_name + ".jpg"))
+
+                    idxx += 64
+
+                
+                # for i in range(len(test_df)):
+                #     prompt = test_df['text'][i]
+                #     path = test_df['path'][i]
+                #     img_name = path.split("/")[-1].split(".")[0]
+
+                #     print("PROMPT: ", prompt)
+                    
+                #     result = pipeline(
+                #         prompt = prompt,
+                #         height = args.resolution,
+                #         width = args.resolution,
+                #         guidance_scale=4,
+                #         num_inference_steps=50,
+                #         num_images_per_prompt=1
+                #     )
+
+                #     for i, img in enumerate(result.images):
+                #         img.save(os.path.join(args.synthetic_images_dir, img_name + ".jpg"))
             
                 # Calculate the FID Score
                 # print("Calculating the FID Score.")
                 # We need image tensors of both real and synthetic images
+                test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
                 real_image_paths = test_df['path'].tolist()
                 print("Preparing Real Image Tensors")
                 real_images = get_images_tensor_from_paths(real_image_paths)
@@ -1352,10 +1407,14 @@ def objective(trial):
 
                 # Calculate the FID Score
                 fid_score = compute_fid(real_images, synthetic_images, device=accelerator.device)
+                mifid_score = compute_mifid(real_images, synthetic_images, device=accelerator.device)
                 print("FID SCORE: ", fid_score)
+
+                FID_END_TIME = time.time()
 
         end_time = time.time()
         print("Time taken for this HPO iteration: ", end_time - start_time)
+        print("Time taken for FID calculation: ", FID_END_TIME - FID_START_TIME)
 
         try:
             # Remove the directory of syntheic images
@@ -1364,84 +1423,6 @@ def objective(trial):
             pass
 
         ############################## Save the mask with the best trial as a safeguard
-
-        # mask_savedir = os.path.join(
-        #     args.output_dir, "Saved Masks"
-        # )
-        # os.makedirs(mask_savedir, exist_ok=True)
-
-        # args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
-        # os.makedirs(args.plots_save_dir, exist_ok=True)
-
-        # if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
-        #     print("Best trial:")
-        #     trial = study.best_trial
-
-        #     print("  Value: ", trial.value)
-
-        #     print("  Params: ")
-        #     best_mask = []
-        #     for key, value in trial.params.items():
-        #         print("    {}: {}".format(key, value))
-        #         if key == "lr":
-        #             continue
-        #         best_mask.append(value)
-            
-        #     # Save the best mask
-        #     best_mask = np.array(best_mask).astype(np.int8)
-            
-        #     print("Saving the best mask at: ", mask_savedir)
-        #     mask_name = "best_mask.npy"
-        #     np.save(os.path.join(mask_savedir, mask_name), best_mask)
-        # else:
-        #     trials = study.best_trials
-
-        # # Creating Optuna study statistics dataframe
-        # df = study.trials_dataframe()
-
-        # if(len(df) > 1):                    # Run this only if there are more than 1 trials
-        #     stats_df_savedir = "hpo_stats"
-        #     stats_df_name = "hpo_stats.csv"
-
-        #     try:
-        #         df = df.drop(
-        #             [
-        #                 "datetime_start",
-        #                 "datetime_complete",
-        #                 "duration",
-        #                 #"system_attrs_completed_rung_0",
-        #             ],
-        #             axis=1,
-        #         )  # Drop unnecessary columns
-        #     except:
-        #         pass
-
-        #     os.makedirs(os.path.join(args.output_dir, stats_df_savedir), exist_ok=True)
-
-        #     if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
-        #         df = df.rename(columns={"value": args.objective_metric})
-        #     else:
-        #         df = df.rename(columns={"values_0": "memorization_metric", "values_1": "FID_Score"})
-
-        #     df.to_csv(os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False)
-
-        #     try:
-        #         pareto_frontier_df = pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score')
-        #         pareto_frontier_df.to_csv(os.path.join(args.output_dir, stats_df_savedir, "pareto_frontier.csv"), index=False)
-        #     except:
-        #         import pdb; pdb.set_trace()
-
-        #     # Iterate over the pareto frontier dataframe and save the masks
-        #     cols = ['params_Mask Idx {}'.format(i) for i in range(args.mask_length)]
-        #     mask_df = pareto_frontier_df[cols]
-
-        #     for idx, row in mask_df.iterrows():
-        #         mask = row.values
-        #         mask = mask.astype(np.int8)
-        #         mask_name = "best_mask_{}.npy".format(idx)
-        #         np.save(os.path.join(mask_savedir, mask_name), mask)
-        # else:
-        #     pass
 
         logs_savedir = os.path.join(args.output_dir, "logs")
         os.makedirs(logs_savedir, exist_ok=True)

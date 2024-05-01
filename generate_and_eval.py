@@ -156,8 +156,8 @@ def generate_and_eval(args):
 
     GLOBAL_FID = []
     GLOBAL_MIFID = []
-    # SEEDS = [42, 1234, 5678, 1111]
-    SEEDS = [42]
+    SEEDS = [42, 1234, 5678, 1111]
+    # SEEDS = [42]
 
     for seed in SEEDS:
         random.seed(seed)
