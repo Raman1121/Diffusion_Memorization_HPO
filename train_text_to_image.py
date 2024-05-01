@@ -591,6 +591,7 @@ def main():
         seed=args.dataset_split_seed,
         dataset_size_ratio=args.data_size_ratio,
         use_real_images=True,
+        use_random_word_addition=args.use_random_word_addition,
     )
     val_dataset = MimicCXRDataset(
         csv_file=args.val_data_path,

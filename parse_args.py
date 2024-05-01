@@ -420,6 +420,11 @@ def parse_args():
         help="Number of times to repeat a dataset for deliberate memorization",
     )
 
+    parser.add_argument(
+        "--use_random_word_addition",
+        action="store_true",
+    )
+
     ########################## HPO Args ##########################
     parser.add_argument(
         "--binary_mask_path",

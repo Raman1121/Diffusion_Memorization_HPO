@@ -419,6 +419,7 @@ def prepare_memorization_data(args, tokenizer):
         seed=args.dataset_split_seed,
         dataset_size_ratio=args.data_size_ratio,
         use_real_images=True,
+        use_random_word_addition=args.use_random_word_addition,
     )
 
     train_dataset_mem = MimicCXRDataset(
@@ -429,6 +430,7 @@ def prepare_memorization_data(args, tokenizer):
         seed=args.dataset_split_seed,
         dataset_size_ratio=1.0,
         use_real_images=True,
+        use_random_word_addition=args.use_random_word_addition,
     )
 
     # test_dataset = MimicCXRDataset(
