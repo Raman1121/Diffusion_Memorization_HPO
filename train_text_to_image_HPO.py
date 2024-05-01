@@ -592,6 +592,8 @@ def prepare_model(args, binary_mask=None):
         # Apply Mask to SV-DIFF U-Net
         unet, optim_params, optim_params_1d = enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask)
 
+        return unet, optim_params, optim_params_1d
+
     elif args.unet_pretraining_type == 'auto_difffit':
 
         assert binary_mask is not None
@@ -790,7 +792,11 @@ def objective(trial):
     binary_mask = create_opt_mask(trial, args)
     print("BINARY MASK: ", binary_mask)
 
-    unet = prepare_model(args, binary_mask)
+    if(args.unet_pretraining_type == 'svdiff' or args.unet_pretraining_type == 'auto_svdiff'):
+        unet, optim_params, optim_params_1d = prepare_model(args, binary_mask)
+    else:
+        unet = prepare_model(args, binary_mask)
+        
     tunable_params = check_tunable_params(unet, False)
     
     # Freeze vae and text_encoder
@@ -899,7 +905,34 @@ def objective(trial):
 
     # Move this logic to a separate function
     # Prepare Optimizer
-    optimizer = prepare_optimizer(args, unet.parameters())
+    # optimizer = prepare_optimizer(args, unet.parameters())
+
+    if args.scale_lr:
+        args.learning_rate = (
+            args.learning_rate
+            * args.gradient_accumulation_steps
+            * args.train_batch_size
+            * accelerator.num_processes
+        )
+
+    optimizer_cls = torch.optim.AdamW
+
+    if(args.unet_pretraining_type == "svdiff" or args.unet_pretraining_type == "auto_svdiff"):
+        optimizer = optimizer_cls(
+                    [{"params": optim_params}, {"params": optim_params_1d, "lr": args.learning_rate_1d}],
+                    lr=args.learning_rate,
+                    betas=(args.adam_beta1, args.adam_beta2),
+                    weight_decay=args.adam_weight_decay,
+                    eps=args.adam_epsilon,
+                )
+    else:
+        optimizer = optimizer_cls(
+                unet.parameters(),
+                lr=args.learning_rate,
+                betas=(args.adam_beta1, args.adam_beta2),
+                weight_decay=args.adam_weight_decay,
+                eps=args.adam_epsilon,
+            )
 
     # Prepare Datasets and DataLoaders
     # train_dataset, val_dataset, test_dataset, train_dataloader, val_dataloader, test_dataloader = prepare_data(args, tokenizer)

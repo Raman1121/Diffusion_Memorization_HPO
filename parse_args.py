@@ -152,6 +152,12 @@ def parse_args():
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument(
+        "--learning_rate_1d",
+        type=float,
+        default=1e-6,
+        help="Initial learning rate (after the potential warmup period) to use for 1-d weights",
+    )
+    parser.add_argument(
         "--scale_lr",
         action="store_true",
         default=False,

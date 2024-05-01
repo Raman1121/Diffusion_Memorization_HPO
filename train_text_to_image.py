@@ -544,13 +544,22 @@ def main():
     else:
         optimizer_cls = torch.optim.AdamW
 
-    optimizer = optimizer_cls(
-        unet.parameters(),
-        lr=args.learning_rate,
-        betas=(args.adam_beta1, args.adam_beta2),
-        weight_decay=args.adam_weight_decay,
-        eps=args.adam_epsilon,
-    )
+    if(args.unet_pretraining_type == "svdiff" or args.unet_pretraining_type == "auto_svdiff"):
+        optimizer = optimizer_cls(
+                    [{"params": optim_params}, {"params": optim_params_1d, "lr": args.learning_rate_1d}],
+                    lr=args.learning_rate,
+                    betas=(args.adam_beta1, args.adam_beta2),
+                    weight_decay=args.adam_weight_decay,
+                    eps=args.adam_epsilon,
+                )
+    else:
+        optimizer = optimizer_cls(
+                unet.parameters(),
+                lr=args.learning_rate,
+                betas=(args.adam_beta1, args.adam_beta2),
+                weight_decay=args.adam_weight_decay,
+                eps=args.adam_epsilon,
+            )
 
     # Preprocessing the datasets.
     train_transforms = transforms.Compose(
