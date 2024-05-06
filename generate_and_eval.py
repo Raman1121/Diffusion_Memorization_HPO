@@ -61,14 +61,15 @@ def load_adapted_unet(args, exp_path, pipe):
 
 def loadSDModel(args, exp_path, cuda_device):
 
-    device = f"cuda:{cuda_device}" if torch.cuda.is_available() else "cpu"
+    # device = f"cuda:{cuda_device}" if torch.cuda.is_available() else "cpu"
+    device = "cuda:1"
     sd_folder_path = args["pretrained_model_name_or_path"]
 
     pipe = StableDiffusionPipeline.from_pretrained(sd_folder_path, revision=args["mixed_precision"])
 
     load_adapted_unet(args, exp_path, pipe)
 
-    pipe.to(device)
+    pipe.to('cuda')
     pipe.to(torch.float16)
     pipe.safety_checker = None
     pipe.requires_safety_checker = False
@@ -242,21 +243,23 @@ if __name__ == "__main__":
     config = parse_args()
     project_root_path = Path(os.getcwd())
 
-    if(args.use_random_word_addition):
+    if config.use_random_word_addition:
         config.output_dir = os.path.join(
             config.output_dir, 
-            config.unet_pretraining_type + "_RWA" + 
+            config.unet_pretraining_type + "_RWA" 
         )
     else:
         config.output_dir = os.path.join(
-                config.output_dir, 
-                config.unet_pretraining_type
-            )
+            config.output_dir, 
+            config.unet_pretraining_type
+        )
     config.results_savedir = os.path.join(config.output_dir, "results")
     os.makedirs(config.results_savedir, exist_ok=True)
     
-    config.cuda_device = 0
-    config.train_batch_size = 128   # Works when the pipeline dtype is fp16
+    # config.cuda_device = 0
+    config.cuda_device = torch.cuda.current_device()
+    print("CUDA Device: ", config.cuda_device)
+    # config.train_batch_size = 16   # Works when the pipeline dtype is fp16
 
     config.exp_path = config.output_dir
     config.save_images_path = os.path.join(config.exp_path, "synthetic_images_{}".format(config.run_eval_on))
