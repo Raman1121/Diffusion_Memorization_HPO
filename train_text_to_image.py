@@ -858,9 +858,8 @@ def main():
 
                             # TODO: Ask What do the following lines do?
                             # Answer: Remove the samples that have a memorization detection metric above the threshold
-                            args.hard_threshold = 0.1
-                            model_pred = model_pred[noise_pred_text_norm < args.hard_threshold]
-                            target = target[noise_pred_text_norm < args.hard_threshold]
+                            model_pred = model_pred[noise_pred_text_norm < args.mitigation_threshold]
+                            target = target[noise_pred_text_norm < args.mitigation_threshold]
                         
 
                     if len(model_pred) != 0:
