@@ -215,7 +215,10 @@ def generate_and_eval(args):
         _row = [args["unet_pretraining_type"], tunable_params, np.mean(GLOBAL_MIFID), np.std(GLOBAL_MIFID)]
         results_df.loc[len(results_df)] = _row
 
-        results_df.to_csv(os.path.join(args["results_savedir"], "results_MIFID.csv"), index=False)
+        if(args["use_random_word_addition"]):
+            results_df.to_csv(os.path.join(args["results_savedir"], "results_RWA_MIFID.csv"), index=False)
+        else:
+            results_df.to_csv(os.path.join(args["results_savedir"], "results_MIFID.csv"), index=False)
 
     elif(args["run_eval_on"] == "test"):
         try:
@@ -227,7 +230,10 @@ def generate_and_eval(args):
         _row = [args["unet_pretraining_type"], tunable_params, np.mean(GLOBAL_FID), np.std(GLOBAL_FID)]
         results_df.loc[len(results_df)] = _row
 
-        results_df.to_csv(os.path.join(args["results_savedir"], "results_FID.csv"), index=False)
+        if(args["use_random_word_addition"]):
+            results_df.to_csv(os.path.join(args["results_savedir"], "results_RWA_FID.csv"), index=False)
+        else:
+            results_df.to_csv(os.path.join(args["results_savedir"], "results_FID.csv"), index=False)
 
 
 
@@ -236,10 +242,16 @@ if __name__ == "__main__":
     config = parse_args()
     project_root_path = Path(os.getcwd())
 
-    config.output_dir = os.path.join(
+    if(args.use_random_word_addition):
+        config.output_dir = os.path.join(
             config.output_dir, 
-            config.unet_pretraining_type
+            config.unet_pretraining_type + "_RWA" + 
         )
+    else:
+        config.output_dir = os.path.join(
+                config.output_dir, 
+                config.unet_pretraining_type
+            )
     config.results_savedir = os.path.join(config.output_dir, "results")
     os.makedirs(config.results_savedir, exist_ok=True)
     

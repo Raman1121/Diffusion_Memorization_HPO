@@ -235,7 +235,10 @@ def log_validation(
 def main():
     args = parse_args()
 
-    args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type)  
+    if(args.use_random_word_addition):
+        args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_RWA")  
+    else:    
+        args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type)  
 
     # Import CSV path from the YAML file
     with open("data_config.yaml") as file:
@@ -826,40 +829,38 @@ def main():
 
                     ### mitigation:
                     # NOTE: Don't think we need to perform mitigation here
-                    # if args.hard_threshold is not None:
-                    # with torch.no_grad():
-                    #     uncond_tokens = [""] * len(model_pred)
-                    #     uncond_input = tokenizer(
-                    #         uncond_tokens,
-                    #         padding="max_length",
-                    #         max_length=tokenizer.model_max_length,
-                    #         truncation=True,
-                    #         return_tensors="pt",
-                    #     )
-                    #     uncond_prompt_embed = text_encoder(
-                    #         uncond_input["input_ids"].to(accelerator.device)
-                    #     )[0]
-                    #     noise_pred_uncond = unet(
-                    #         noisy_latents, timesteps, uncond_prompt_embed
-                    #     ).sample
-                    #     noise_pred_text = model_pred - noise_pred_uncond
-                    #     noise_pred_text = noise_pred_text.reshape(
-                    #         len(noise_pred_text), -1
-                    #     )
-                    #     noise_pred_text_norm = noise_pred_text.norm(p=2, dim=1)
+                    if args.mitigation_threshold is not None:
+                        with torch.no_grad():
+                            uncond_tokens = [""] * len(model_pred)
+                            uncond_input = tokenizer(
+                                uncond_tokens,
+                                padding="max_length",
+                                max_length=tokenizer.model_max_length,
+                                truncation=True,
+                                return_tensors="pt",
+                            )
+                            uncond_prompt_embed = text_encoder(
+                                uncond_input["input_ids"].to(accelerator.device)
+                            )[0]
+                            noise_pred_uncond = unet(
+                                noisy_latents, timesteps, uncond_prompt_embed
+                            ).sample
+                            noise_pred_text = model_pred - noise_pred_uncond
+                            noise_pred_text = noise_pred_text.reshape(
+                                len(noise_pred_text), -1
+                            )
+                            noise_pred_text_norm = noise_pred_text.norm(p=2, dim=1)
 
-                    #     #TODO: How to calculate the memorization detection metric as a single value?
-                    #     print("Timesteps: ", timesteps)
-                    #     print("Memorization Detection Metric: ", noise_pred_text_norm)
-                    #     print("Memorization Detection Metric after normalizing: ", (torch.sum(noise_pred_text_norm).cpu()/len(timesteps)).item())
+                            #TODO: How to calculate the memorization detection metric as a single value?
+                            print("Timesteps: ", timesteps)
+                            print("Memorization Detection Metric: ", noise_pred_text_norm)
+                            print("Memorization Detection Metric after normalizing: ", (torch.sum(noise_pred_text_norm).cpu()/len(timesteps)).item())
 
-                    #     # TODO: Ask What do the following lines do?
-                    #     # Answer: Remove the samples that have a memorization detection metric above the threshold
-                    #     args.hard_threshold = 0.1
-                    #     model_pred = model_pred[noise_pred_text_norm < args.hard_threshold]
-                    #     target = target[noise_pred_text_norm < args.hard_threshold]
-
-                        # import pdb; pdb.set_trace()
+                            # TODO: Ask What do the following lines do?
+                            # Answer: Remove the samples that have a memorization detection metric above the threshold
+                            args.hard_threshold = 0.1
+                            model_pred = model_pred[noise_pred_text_norm < args.hard_threshold]
+                            target = target[noise_pred_text_norm < args.hard_threshold]
                         
 
                     if len(model_pred) != 0:

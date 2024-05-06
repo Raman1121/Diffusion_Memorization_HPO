@@ -373,8 +373,10 @@ def parse_args():
     ### mitigation method:
     parser.add_argument("--prompt_aug_style", default=None)
     parser.add_argument("--repeat_num", default=1, type=int)
+
+    ## For ICLR 2024 mitigation strategy
     parser.add_argument(
-        "--hard_threshold",
+        "--mitigation_threshold",
         type=float,
         default=None,
     )
