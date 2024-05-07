@@ -368,6 +368,7 @@ def main():
                 method=args.unet_pretraining_type,
                 args=args,
                 pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+                cache_dir=args.cache_dir
             )
     elif args.unet_pretraining_type == 'auto_svdiff':
 
@@ -380,6 +381,7 @@ def main():
                 method="svdiff",
                 args=args,
                 pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+                cache_dir=args.cache_dir
             )
 
         # Apply Mask to SV-DIFF U-Net
