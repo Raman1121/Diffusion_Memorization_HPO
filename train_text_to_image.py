@@ -1019,6 +1019,7 @@ def main():
                     vae=vae,
                     unet=unet,
                     revision=args.revision,
+                    cache_dir=args.cache_dir
                 )
                 pipeline.save_pretrained(args.output_dir)
             
