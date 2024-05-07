@@ -483,11 +483,11 @@ def apply_lora_to_unetv2(unet, image_lora_rank, dtype):
     return unet, lora_layers
 
 
-def apply_svdiff_to_unet(args, **kwargs):
+def apply_svdiff_to_unet(args, cache_dir):
 
     # Adapted from https://github.com/mkshing/svdiff-pytorch/blob/a78f69e14410c1963318806050a566d262eca9f8/train_svdiff.py#L717
     pretrained_model_name_or_path = args.pretrained_model_name_or_path
-    unet = load_unet_for_svdiff(pretrained_model_name_or_path, subfolder="unet", cache_dir=kwargs["cache_dir"])
+    unet = load_unet_for_svdiff(pretrained_model_name_or_path, subfolder="unet", cache_dir=cache_dir)
 
     unet.requires_grad_(False)
     optim_params = []
@@ -676,7 +676,7 @@ def get_adapted_unet(unet, method, args, **kwargs):
         unet, lora_layers = apply_lora_to_unetv2(unet, image_lora_rank=kwargs["image_lora_rank"], dtype=kwargs["dtype"])
         return unet, lora_layers
     elif method == "svdiff":
-        unet, optim_params, optim_params_1d = apply_svdiff_to_unet(args, kwargs["cache_dir"])
+        unet, optim_params, optim_params_1d = apply_svdiff_to_unet(args=args, cache_dir=kwargs["cache_dir"])
         return unet, optim_params, optim_params_1d
     elif method == 'difffit':
         print("Loading model for DIFFFIT")
