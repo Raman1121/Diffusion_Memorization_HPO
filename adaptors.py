@@ -483,11 +483,11 @@ def apply_lora_to_unetv2(unet, image_lora_rank, dtype):
     return unet, lora_layers
 
 
-def apply_svdiff_to_unet(args):
+def apply_svdiff_to_unet(args, **kwargs):
 
     # Adapted from https://github.com/mkshing/svdiff-pytorch/blob/a78f69e14410c1963318806050a566d262eca9f8/train_svdiff.py#L717
     pretrained_model_name_or_path = args.pretrained_model_name_or_path
-    unet = load_unet_for_svdiff(pretrained_model_name_or_path, subfolder="unet")
+    unet = load_unet_for_svdiff(pretrained_model_name_or_path, subfolder="unet", cache_dir=kwargs["cache_dir"])
 
     unet.requires_grad_(False)
     optim_params = []
@@ -685,6 +685,7 @@ def get_adapted_unet(unet, method, args, **kwargs):
                 efficient_weights_ckpt=None,
                 hf_hub_kwargs=None,
                 is_bitfit=False, 
+                cache_dir=kwargs["cache_dir"]
                 )
         unet = mark_only_biases_as_trainable(unet, is_bitfit=False)
 
@@ -1040,9 +1041,10 @@ def load_unet_for_difffit(
     # load pre-trained weights
     param_device = "cpu"
     torch_dtype = kwargs["torch_dtype"] if "torch_dtype" in kwargs else None
+    cache_dir = kwargs["cache_dir"] if "cache_dir" in kwargs else None
     if not is_bitfit:
         config = UNet2DConditionModel.load_config(pretrained_model_name_or_path, subfolder=subfolder)
-        original_model = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder)
+        original_model = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder, cache_dir=cache_dir)
         state_dict = original_model.state_dict()
         with accelerate.init_empty_weights():
             model = UNet2DConditionModelForDiffFit.from_config(config)
@@ -1081,7 +1083,7 @@ def load_unet_for_difffit(
                 set_module_tensor_to_device(model, param_name, param_device, value=param)
     else:
         original_model = None
-        model = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder)
+        model = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder, cache_dir=cache_dir)
 
     if efficient_weights_ckpt:
         if os.path.isdir(efficient_weights_ckpt):

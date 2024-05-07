@@ -309,12 +309,14 @@ def main():
 
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="scheduler"
+        args.pretrained_model_name_or_path, subfolder="scheduler",
+        cache_dir=args.cache_dir
     )
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="tokenizer",
         revision=args.revision,
+        cache_dir=args.cache_dir
     )
 
     def deepspeed_zero_init_disabled_context_manager():
@@ -336,15 +338,18 @@ def main():
             args.pretrained_model_name_or_path,
             subfolder="text_encoder",
             revision=args.revision,
+            cache_dir=args.cache_dir
         )
         vae = AutoencoderKL.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision
+            args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision,
+            cache_dir=args.cache_dir
         )
 
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="unet",
         revision=args.non_ema_revision,
+        cache_dir=args.cache_dir
     )
 
     # Load the Binary Mask here
@@ -418,6 +423,7 @@ def main():
                 method=args.unet_pretraining_type,
                 args=args,
                 pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+                cache_dir=args.cache_dir
             )
     print("UNET")
     tunable_params = check_tunable_params(unet, False)
