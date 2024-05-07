@@ -676,7 +676,7 @@ def get_adapted_unet(unet, method, args, **kwargs):
         unet, lora_layers = apply_lora_to_unetv2(unet, image_lora_rank=kwargs["image_lora_rank"], dtype=kwargs["dtype"])
         return unet, lora_layers
     elif method == "svdiff":
-        unet, optim_params, optim_params_1d = apply_svdiff_to_unet(args)
+        unet, optim_params, optim_params_1d = apply_svdiff_to_unet(args, kwargs["cache_dir"])
         return unet, optim_params, optim_params_1d
     elif method == 'difffit':
         print("Loading model for DIFFFIT")
