@@ -38,9 +38,6 @@ class MimicCXRDataset(torch.utils.data.Dataset):
         self.use_findings = use_findings
         self.use_random_word_addition = use_random_word_addition
 
-        if(self.use_random_word_addition):
-            print("Using Random Word Addition")
-
         random.seed(seed)
 
         if(isinstance(csv_file, pd.DataFrame)):

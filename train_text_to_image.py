@@ -235,8 +235,12 @@ def log_validation(
 def main():
     args = parse_args()
 
+    
+
     if(args.use_random_word_addition):
         args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_RWA")  
+    if(args.mitigation_threshold is not None):
+        args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_Mitigation_{}".format(args.mitigation_threshold))
     else:    
         args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type)  
 
@@ -429,6 +433,12 @@ def main():
             )
     print("UNET")
     tunable_params = check_tunable_params(unet, False)
+
+    if(args.mitigation_threshold is not None):
+        print("Using ICLR'24 Mitigation method")
+
+    if(args.use_random_word_addition):
+        print("Using Random Word Addition")
     
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
@@ -860,9 +870,9 @@ def main():
                             noise_pred_text_norm = noise_pred_text.norm(p=2, dim=1)
 
                             #TODO: How to calculate the memorization detection metric as a single value?
-                            print("Timesteps: ", timesteps)
-                            print("Memorization Detection Metric: ", noise_pred_text_norm)
-                            print("Memorization Detection Metric after normalizing: ", (torch.sum(noise_pred_text_norm).cpu()/len(timesteps)).item())
+                            # print("Timesteps: ", timesteps)
+                            # print("Memorization Detection Metric: ", noise_pred_text_norm)
+                            # print("Memorization Detection Metric after normalizing: ", (torch.sum(noise_pred_text_norm).cpu()/len(timesteps)).item())
 
                             # TODO: Ask What do the following lines do?
                             # Answer: Remove the samples that have a memorization detection metric above the threshold
@@ -898,6 +908,7 @@ def main():
                                 * mse_loss_weights
                             )
                             loss = loss.mean()
+                            
 
                         # Gather the losses across all processes for logging (if we use distributed training).
                         avg_loss = accelerator.gather(
@@ -905,6 +916,7 @@ def main():
                         ).mean()
                         train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
+                        # print(loss)
                         # Backpropagate
                         accelerator.backward(loss)
                         if accelerator.sync_gradients:

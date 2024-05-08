@@ -244,15 +244,31 @@ if __name__ == "__main__":
     project_root_path = Path(os.getcwd())
 
     if config.use_random_word_addition:
-        config.output_dir = os.path.join(
-            config.output_dir, 
-            config.unet_pretraining_type + "_RWA" 
-        )
-    else:
-        config.output_dir = os.path.join(
+        config.unet_pretraining_type = config.unet_pretraining_type + "_RWA" 
+    if config.mitigation_threshold is not None:
+        config.unet_pretraining_type = config.unet_pretraining_type + "_Mitigation_{}".format(config.mitigation_threshold)
+
+    # if config.use_random_word_addition:
+    #     config.output_dir = os.path.join(
+    #         config.output_dir, 
+    #         config.unet_pretraining_type + "_RWA" 
+    #     )
+    # if(config.mitigation_threshold is not None):
+    #     config.output_dir = os.path.join(
+    #         config.output_dir, 
+    #         config.unet_pretraining_type + "_RWA" 
+    #     )
+    # else:
+    #     config.output_dir = os.path.join(
+    #         config.output_dir, 
+    #         config.unet_pretraining_type
+    #     )
+
+    config.output_dir = os.path.join(
             config.output_dir, 
             config.unet_pretraining_type
         )
+
     config.results_savedir = os.path.join(config.output_dir, "results")
     os.makedirs(config.results_savedir, exist_ok=True)
     
