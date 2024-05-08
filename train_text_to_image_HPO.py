@@ -1585,7 +1585,7 @@ if __name__ == "__main__":
     args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
     os.makedirs(args.plots_save_dir, exist_ok=True)
 
-    if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID')):
+    if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID')):
         df = df.rename(columns={"value": args.objective_metric})
     else:
         df = df.rename(columns={"values_0": "memorization_metric", "values_1": "FID_Score"})
