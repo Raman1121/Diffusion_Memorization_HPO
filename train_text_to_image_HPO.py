@@ -85,14 +85,22 @@ def create_opt_mask(trial, args):
         args.mask_length = 13
     elif(args.unet_pretraining_type == 'auto_attention'):
         args.mask_length = 16
-    else:
-        raise NotImplementedError
+    elif(args.unet_pretraining_type == 'full' or args.unet_pretraining_type == 'svdiff' or args.unet_pretraining_type == 'difffit'):
+        args.mask_length = 13
 
     print("Creating a binary mask of length: ", args.mask_length)
-    mask = np.zeros(args.mask_length, dtype=np.int8)
 
-    for i in range(args.mask_length):
-        mask[i] = trial.suggest_int("Mask Idx {}".format(i), 0, 1)
+    if("auto_" in args.unet_pretraining_type):
+        mask = np.zeros(args.mask_length, dtype=np.int8)
+
+        for i in range(args.mask_length):
+            mask[i] = trial.suggest_int("Mask Idx {}".format(i), 0, 1)
+    elif(args.unet_pretraining_type == 'full'):
+        mask = np.array([1]*args.mask_length)
+    elif(args.unet_pretraining_type == 'svdiff'):
+        mask = np.array([2]*args.mask_length)
+    elif(args.unet_pretraining_type == 'difffit'):
+        mask = np.array([3]*args.mask_length)
 
     return mask
 
@@ -578,6 +586,8 @@ def prepare_model(args, binary_mask=None):
                 pretrained_model_name_or_path=args.pretrained_model_name_or_path,
                 cache_dir=args.cache_dir
             )
+        return unet, optim_params, optim_params_1d
+
     elif args.unet_pretraining_type == 'auto_svdiff':
 
         assert binary_mask is not None
@@ -678,8 +688,11 @@ def objective(trial):
 
     start_time = time.time()
 
-    args.learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
-    print("Suggested learning rate: ", args.learning_rate)
+    if("auto_" in args.unet_pretraining_type):
+        args.learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
+        print("Suggested learning rate: ", args.learning_rate)
+    else:
+        print("Fixed learning rate: ", args.learning_rate)
     
     if args.non_ema_revision is not None:
         deprecate(
@@ -1462,7 +1475,7 @@ def objective(trial):
         try:
             logs_df = pd.read_csv(os.path.join(logs_savedir, "logs.csv"))
         except:
-
+            
             cols = ['params_Mask Idx {}'.format(i) for i in range(args.mask_length)] + ['learning_rate' ,'memorization_metric', 'FID_Score', 'time_taken']
             logs_df = pd.DataFrame(columns=cols)
         
@@ -1591,18 +1604,20 @@ if __name__ == "__main__":
         df = df.rename(columns={"values_0": "memorization_metric", "values_1": "FID_Score"})
 
     df.to_csv(os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False)
-    pareto_frontier_df = pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score')
-    pareto_frontier_df.to_csv(os.path.join(args.output_dir, stats_df_savedir, "pareto_frontier.csv"), index=False)
 
-    # Iterate over the pareto frontier dataframe and save the masks
-    cols = ['params_Mask Idx {}'.format(i) for i in range(13)]
-    mask_df = pareto_frontier_df[cols]
+    if("auto_" in args.unet_pretraining_type):
+        pareto_frontier_df = pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score')
+        pareto_frontier_df.to_csv(os.path.join(args.output_dir, stats_df_savedir, "pareto_frontier.csv"), index=False)
 
-    for idx, row in mask_df.iterrows():
-        mask = row.values
-        mask = mask.astype(np.int8)
-        mask_name = "best_mask_{}.npy".format(idx)
-        np.save(os.path.join(mask_savedir, mask_name), mask)
+        # Iterate over the pareto frontier dataframe and save the masks
+        cols = ['params_Mask Idx {}'.format(i) for i in range(13)]
+        mask_df = pareto_frontier_df[cols]
+
+        for idx, row in mask_df.iterrows():
+            mask = row.values
+            mask = mask.astype(np.int8)
+            mask_name = "best_mask_{}.npy".format(idx)
+            np.save(os.path.join(mask_savedir, mask_name), mask)
 
 
 

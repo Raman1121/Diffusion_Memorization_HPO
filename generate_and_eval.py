@@ -104,8 +104,9 @@ def generate_synthetic_dataset(args, df, sd_pipeline):
     )
 
     text_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=args["train_batch_size"], num_workers=16,drop_last=False
+        dataset, batch_size=args["train_batch_size"], num_workers=16, drop_last=False
     )
+    print("Batch Size: ", args["train_batch_size"])
 
     df_out = pd.DataFrame(
         columns=["subject_id", "study", "gt_image_path", "path", "text"]
