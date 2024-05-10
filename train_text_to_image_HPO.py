@@ -691,6 +691,9 @@ def objective(trial):
     if("auto_" in args.unet_pretraining_type):
         args.learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
         print("Suggested learning rate: ", args.learning_rate)
+    elif(args.unet_pretraining_type == 'full' and args.learning_rate is None):
+        args.learning_rate = trial.suggest_float("learning_rate", 5e-6, 1e-5, log=True)
+        print("Suggested learning rate for Full FT: ", args.learning_rate)
     else:
         print("Fixed learning rate: ", args.learning_rate)
     
