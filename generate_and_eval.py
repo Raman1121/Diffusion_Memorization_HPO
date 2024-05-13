@@ -62,7 +62,7 @@ def load_adapted_unet(args, exp_path, pipe):
 def loadSDModel(args, exp_path, cuda_device):
 
     # device = f"cuda:{cuda_device}" if torch.cuda.is_available() else "cpu"
-    device = "cuda:1"
+    # device = "cuda:1"
     sd_folder_path = args["pretrained_model_name_or_path"]
 
     pipe = StableDiffusionPipeline.from_pretrained(sd_folder_path, revision=args["mixed_precision"])
@@ -70,7 +70,7 @@ def loadSDModel(args, exp_path, cuda_device):
     load_adapted_unet(args, exp_path, pipe)
 
     pipe.to('cuda')
-    pipe.to(torch.float16)
+    # pipe.to(torch.float16)
     pipe.safety_checker = None
     pipe.requires_safety_checker = False
 
@@ -114,13 +114,14 @@ def generate_synthetic_dataset(args, df, sd_pipeline):
 
     for epoch in range(args["images_per_prompt"]):
         for batch in text_loader:
-            result = sd_pipeline(
-                prompt=batch["text"],
-                height=args["resolution"],
-                width=args["resolution"],
-                guidance_scale=4,
-                num_inference_steps=50,
-            )
+            with torch.autocast("cuda"):
+                result = sd_pipeline(
+                    prompt=batch["text"],
+                    height=args["resolution"],
+                    width=args["resolution"],
+                    guidance_scale=4,
+                    num_inference_steps=50,
+                )
             batch["gt_image_path"] = []
             for i, img in enumerate(result.images):
                 root_name = os.path.join(
@@ -158,8 +159,8 @@ def generate_and_eval(args):
 
     GLOBAL_FID = []
     GLOBAL_MIFID = []
-    SEEDS = [42, 1234, 5678, 1111]
-    # SEEDS = [42]
+    # SEEDS = [42, 1234, 5678, 1111]
+    SEEDS = [42]
 
     for seed in SEEDS:
         random.seed(seed)
@@ -167,7 +168,9 @@ def generate_and_eval(args):
         # Subset the dataframe (1000 samples) randomly according to the seed
         df = pd.read_excel(args["prompts_path"])
         df['path'] = df['path'].apply(lambda x: os.path.join(yaml_data["images_path_train"], x))
-        df = df.sample(n=args["num_images_to_generate"], random_state=seed)
+        # df = df.sample(n=args["num_images_to_generate"], random_state=seed)
+        # Sample first 1000 samples
+        df = df.iloc[:1000]
         df = df.reset_index(drop=True)
 
         # STEP 1: Generate synthetic images and save them
@@ -205,7 +208,7 @@ def generate_and_eval(args):
         print("\n")
 
         # Removing synthetic images directory
-        shutil.rmtree(args["save_images_path"])
+        # shutil.rmtree(args["save_images_path"])
 
     if(args["run_eval_on"] == "train"):   # If running eval on training data, we need to calculate MIFID
         try:

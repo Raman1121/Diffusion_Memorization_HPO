@@ -402,6 +402,7 @@ def main():
                 method="difffit",
                 args=args,
                 pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+                cache_dir=args.cache_dir
             )
 
         # Apply Mask to DiffFit U-Net

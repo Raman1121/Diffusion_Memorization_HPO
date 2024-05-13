@@ -688,6 +688,8 @@ def objective(trial):
 
     start_time = time.time()
 
+    args.learning_rate = None
+
     if("auto_" in args.unet_pretraining_type):
         args.learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
         print("Suggested learning rate: ", args.learning_rate)
