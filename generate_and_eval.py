@@ -67,7 +67,10 @@ def loadSDModel(args, exp_path, cuda_device):
 
     pipe = StableDiffusionPipeline.from_pretrained(sd_folder_path, revision=args["mixed_precision"])
 
-    load_adapted_unet(args, exp_path, pipe)
+    if(args["unet_pretraining_type"] != "freeze"):
+        load_adapted_unet(args, exp_path, pipe)
+    else:
+        pass
 
     pipe.to('cuda')
     # pipe.to(torch.float16)

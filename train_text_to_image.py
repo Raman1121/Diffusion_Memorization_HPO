@@ -875,10 +875,10 @@ def main():
                             # print("Memorization Detection Metric: ", noise_pred_text_norm)
                             # print("Memorization Detection Metric after normalizing: ", (torch.sum(noise_pred_text_norm).cpu()/len(timesteps)).item())
 
-                            # TODO: Ask What do the following lines do?
-                            # Answer: Remove the samples that have a memorization detection metric above the threshold
-                            model_pred = model_pred[noise_pred_text_norm < args.mitigation_threshold]
-                            target = target[noise_pred_text_norm < args.mitigation_threshold]
+                        # TODO: Ask What do the following lines do?
+                        # Answer: Remove the samples that have a memorization detection metric above the threshold
+                        model_pred = model_pred[noise_pred_text_norm < args.mitigation_threshold]
+                        target = target[noise_pred_text_norm < args.mitigation_threshold]
                         
 
                     if len(model_pred) != 0:
