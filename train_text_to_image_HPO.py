@@ -1306,80 +1306,123 @@ def objective(trial):
         # Create the pipeline using the trained modules and save it.
         accelerator.wait_for_everyone()
 
-        # Run this step only if doing multi-objective HPO
-        if(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID'):
-            if accelerator.is_main_process:
-                unet = accelerator.unwrap_model(unet)
-                if args.use_ema:
-                    ema_unet.copy_to(unet.parameters())
+        # if(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID'):
+        if accelerator.is_main_process:
+            unet = accelerator.unwrap_model(unet)
+            if args.use_ema:
+                ema_unet.copy_to(unet.parameters())
 
-                pipeline = StableDiffusionPipeline.from_pretrained(
-                        args.pretrained_model_name_or_path,
-                        text_encoder=text_encoder,
-                        vae=vae.to(torch.float32),  # Keeping VAE in float32 allows using mixed_precision=fp16 for training
-                        unet=unet,
-                        revision=args.revision,
-                        safety_checker=None,
-                    )
-                pipeline = pipeline.to(accelerator.device)
-                pipeline.torch_dtype = weight_dtype
-                
-                # pipeline.save_pretrained(args.output_dir)
-
-                # Generate images
-                os.makedirs(args.synthetic_images_dir)
-                # df = pd.DataFrame(columns=['path'])
-
-                # Select 100 prompts at random from test_df for FID calculation later
-                random.seed(args.dataset_split_seed)
-                # TEST_PROMPTS = random.sample(test_df["text"].tolist(), 100)
-                # Select a subset of 100 samples from the dataframe
-                K = args.num_FID_samples
-                test_df = test_df.sample(n=K, random_state=args.dataset_split_seed).reset_index(drop=True)
-                # test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
-
-                test_transforms = transforms.Compose(
-                    [
-                        transforms.Resize(
-                            args.resolution, interpolation=transforms.InterpolationMode.BILINEAR
-                        ),
-                        (
-                            transforms.CenterCrop(args.resolution)
-                            if args.center_crop
-                            else transforms.RandomCrop(args.resolution)
-                        ),
-                        transforms.ToTensor(),
-                        transforms.Normalize([0.5], [0.5]),
-                    ]
+            pipeline = StableDiffusionPipeline.from_pretrained(
+                    args.pretrained_model_name_or_path,
+                    text_encoder=text_encoder,
+                    vae=vae.to(torch.float32),  # Keeping VAE in float32 allows using mixed_precision=fp16 for training
+                    unet=unet,
+                    revision=args.revision,
+                    safety_checker=None,
                 )
+            pipeline = pipeline.to(accelerator.device)
+            pipeline.torch_dtype = weight_dtype
             
-                # Create dataset from test_df
-                test_dataset = MimicCXRDataset(
-                    csv_file=test_df,   
-                    images_dir=args.images_path_train,
-                    tokenizer=tokenizer,
-                    transform=test_transforms,
-                    seed=args.dataset_split_seed,
-                    dataset_size_ratio=1.0,         # We have already done the splitting
-                    use_real_images=True,
+            # pipeline.save_pretrained(args.output_dir)
+
+            # Generate images
+            os.makedirs(args.synthetic_images_dir)
+            # df = pd.DataFrame(columns=['path'])
+
+            # Select 100 prompts at random from test_df for FID calculation later
+            random.seed(args.dataset_split_seed)
+            # TEST_PROMPTS = random.sample(test_df["text"].tolist(), 100)
+            # Select a subset of 100 samples from the dataframe
+            K = args.num_FID_samples
+            test_df = test_df.sample(n=K, random_state=args.dataset_split_seed).reset_index(drop=True)
+            # test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
+
+            test_transforms = transforms.Compose(
+                [
+                    transforms.Resize(
+                        args.resolution, interpolation=transforms.InterpolationMode.BILINEAR
+                    ),
+                    (
+                        transforms.CenterCrop(args.resolution)
+                        if args.center_crop
+                        else transforms.RandomCrop(args.resolution)
+                    ),
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.5], [0.5]),
+                ]
+            )
+        
+            # Create dataset from test_df
+            test_dataset = MimicCXRDataset(
+                csv_file=test_df,   
+                images_dir=args.images_path_train,
+                tokenizer=tokenizer,
+                transform=test_transforms,
+                seed=args.dataset_split_seed,
+                dataset_size_ratio=1.0,         # We have already done the splitting
+                use_real_images=True,
+            )
+
+            # Create Dataloader
+            test_dataloader = torch.utils.data.DataLoader(
+                test_dataset,
+                batch_size=64,
+                num_workers=16,
+                drop_last=False,
+                shuffle=False,
+            )
+
+
+            print("Generating synthetic images using the fine-tuned model.")
+            
+
+            FID_START_TIME = time.time()
+            idxx = 0
+            for batch in test_dataloader:
+                result = pipeline(
+                    prompt=batch["text"],
+                    height=args.resolution,
+                    width=args.resolution,
+                    guidance_scale=4,
+                    num_inference_steps=50,
+                    num_images_per_prompt=1
                 )
 
-                # Create Dataloader
-                test_dataloader = torch.utils.data.DataLoader(
-                    test_dataset,
-                    batch_size=64,
-                    num_workers=16,
-                    drop_last=False,
-                    shuffle=False,
-                )
+                for i, img in enumerate(result.images):
+                    img_name = 'image_{}'.format(i+idxx)
+                    img.save(os.path.join(args.synthetic_images_dir, img_name + ".jpg"))
 
+                idxx += 64
+        
+            # Calculate the FID Score
+            # print("Calculating the FID Score.")
+            # We need image tensors of both real and synthetic images
+            test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
+            mem_df['path'] = mem_df['path'].apply(lambda x: os.path.join(args.images_path_train, x))
+            real_image_paths = test_df['path'].tolist()
+            print("Preparing Real Image Tensors")
+            real_images = get_images_tensor_from_paths(real_image_paths)
 
-                print("Generating synthetic images using the fine-tuned model.")
-                
+            # Get the synthetic image paths
+            print("Preparing Synthetic Image Tensors")
+            synthetic_image_paths = glob.glob(os.path.join(args.synthetic_images_dir, "*.jpg"))
+            synthetic_images = get_images_tensor_from_paths(synthetic_image_paths)
 
-                FID_START_TIME = time.time()
+            # Calculate the FID Score
+            fid_score = compute_fid(real_images, synthetic_images, device=accelerator.device)
+            # mifid_score = compute_mifid(real_images, synthetic_images, device=accelerator.device)
+            print("FID SCORE: ", fid_score)
+
+            FID_END_TIME = time.time()
+
+            if(args.objective_metric == 'FID_MIFID'):
+                # Calculate MIFID on memorization subset
+
+                os.makedirs(args.synthetic_train_images_dir)
+
+                # 1. Generate synthetic images
                 idxx = 0
-                for batch in test_dataloader:
+                for batch in train_dataloader_mem:
                     result = pipeline(
                         prompt=batch["text"],
                         height=args.resolution,
@@ -1391,67 +1434,23 @@ def objective(trial):
 
                     for i, img in enumerate(result.images):
                         img_name = 'image_{}'.format(i+idxx)
-                        img.save(os.path.join(args.synthetic_images_dir, img_name + ".jpg"))
+                        img.save(os.path.join(args.synthetic_train_images_dir, img_name + ".jpg"))
 
                     idxx += 64
-            
-                # Calculate the FID Score
-                # print("Calculating the FID Score.")
-                # We need image tensors of both real and synthetic images
-                test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
-                mem_df['path'] = mem_df['path'].apply(lambda x: os.path.join(args.images_path_train, x))
-                real_image_paths = test_df['path'].tolist()
+
+                # Prepare real image tensors
+                real_image_paths = mem_df['path'].tolist()
                 print("Preparing Real Image Tensors")
                 real_images = get_images_tensor_from_paths(real_image_paths)
 
-                # Get the synthetic image paths
+                # Prepare synthetic image tensors
                 print("Preparing Synthetic Image Tensors")
-                synthetic_image_paths = glob.glob(os.path.join(args.synthetic_images_dir, "*.jpg"))
+                synthetic_image_paths = glob.glob(os.path.join(args.synthetic_train_images_dir, "*.jpg"))
                 synthetic_images = get_images_tensor_from_paths(synthetic_image_paths)
 
-                # Calculate the FID Score
-                fid_score = compute_fid(real_images, synthetic_images, device=accelerator.device)
-                # mifid_score = compute_mifid(real_images, synthetic_images, device=accelerator.device)
-                print("FID SCORE: ", fid_score)
-
-                FID_END_TIME = time.time()
-
-                if(args.objective_metric == 'FID_MIFID'):
-                    # Calculate MIFID on memorization subset
-
-                    os.makedirs(args.synthetic_train_images_dir)
-
-                    # 1. Generate synthetic images
-                    idxx = 0
-                    for batch in train_dataloader_mem:
-                        result = pipeline(
-                            prompt=batch["text"],
-                            height=args.resolution,
-                            width=args.resolution,
-                            guidance_scale=4,
-                            num_inference_steps=50,
-                            num_images_per_prompt=1
-                        )
-
-                        for i, img in enumerate(result.images):
-                            img_name = 'image_{}'.format(i+idxx)
-                            img.save(os.path.join(args.synthetic_train_images_dir, img_name + ".jpg"))
-
-                        idxx += 64
-
-                    # Prepare real image tensors
-                    real_image_paths = mem_df['path'].tolist()
-                    print("Preparing Real Image Tensors")
-                    real_images = get_images_tensor_from_paths(real_image_paths)
-
-                    # Prepare synthetic image tensors
-                    print("Preparing Synthetic Image Tensors")
-                    synthetic_image_paths = glob.glob(os.path.join(args.synthetic_train_images_dir, "*.jpg"))
-                    synthetic_images = get_images_tensor_from_paths(synthetic_image_paths)
-
-                    # Calculate the MIFID Score
-                    mifid_score = compute_mifid(real_images, synthetic_images, device=accelerator.device)
-                    print("MIFID SCORE: ", mifid_score)
+                # Calculate the MIFID Score
+                mifid_score = compute_mifid(real_images, synthetic_images, device=accelerator.device)
+                print("MIFID SCORE: ", mifid_score)
 
 
 
@@ -1483,14 +1482,21 @@ def objective(trial):
             
             cols = ['params_Mask Idx {}'.format(i) for i in range(args.mask_length)] + ['learning_rate' ,'memorization_metric', 'FID_Score', 'time_taken']
             logs_df = pd.DataFrame(columns=cols)
+            print(logs_df)
         
         # Add to logs df
         _bm = [int(i) for i in binary_mask]
 
-        if('MIFID' not in args.objective_metric):
+        # if('MIFID' not in args.objective_metric):
+        if(args.objective_metric == 'max_norm' or args.objective_metric == 'avg_norm'):
             _row = list(_bm) + [args.learning_rate, memorization_metric, fid_score, end_time - start_time]
-            logs_df.loc[len(logs_df)] = _row
-            logs_df.to_csv(os.path.join(logs_savedir, "logs.csv"), index=False)
+        elif(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'):
+            _row = list(_bm) + [args.learning_rate, memorization_metric, fid_score, end_time - start_time]
+        elif(args.objective_metric == 'FID_MIFID'):
+            _row = list(_bm) + [args.learning_rate, mifid_score, fid_score, end_time - start_time]
+
+        logs_df.loc[len(logs_df)] = _row
+        logs_df.to_csv(os.path.join(logs_savedir, "logs.csv"), index=False)
 
         # Pruning
         if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID')): # Pruning NOT supported for Multi-objective HPO
@@ -1498,7 +1504,9 @@ def objective(trial):
             if trial.should_prune():
                 raise optuna.exceptions.TrialPruned()
 
-        if(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'): # Multi-objective HPO
+        if(args.objective_metric == 'max_norm' or args.objective_metric == 'avg_norm'):
+            return memorization_metric
+        elif(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'): # Multi-objective HPO
             return memorization_metric, fid_score
         elif(args.objective_metric == 'FID_MIFID'):
             return fid_score, mifid_score
