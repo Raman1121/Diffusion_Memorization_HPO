@@ -870,16 +870,21 @@ def main():
                             )
                             noise_pred_text_norm = noise_pred_text.norm(p=2, dim=1)
 
-                            #TODO: How to calculate the memorization detection metric as a single value?
-                            # print("Timesteps: ", timesteps)
-                            # print("Memorization Detection Metric: ", noise_pred_text_norm)
-                            # print("Memorization Detection Metric after normalizing: ", (torch.sum(noise_pred_text_norm).cpu()/len(timesteps)).item())
-
-                        # TODO: Ask What do the following lines do?
                         # Answer: Remove the samples that have a memorization detection metric above the threshold
-                        model_pred = model_pred[noise_pred_text_norm < args.mitigation_threshold]
-                        target = target[noise_pred_text_norm < args.mitigation_threshold]
-                        
+
+                        # import pdb; pdb.set_trace()
+
+                        if(args.mitigation_threshold == 'auto'):
+                            # Remove the samples with top 10% memorization detection metric
+                            auto_threshold = torch.quantile(noise_pred_text_norm, 0.90)
+
+                            model_pred = model_pred[noise_pred_text_norm < auto_threshold]
+                            target = target[noise_pred_text_norm < auto_threshold]
+                        else:
+                            args.mitigation_threshold = float(args.mitigation_threshold)
+
+                            model_pred = model_pred[noise_pred_text_norm < args.mitigation_threshold]
+                            target = target[noise_pred_text_norm < args.mitigation_threshold]
 
                     if len(model_pred) != 0:
                         if args.snr_gamma is None:
@@ -983,30 +988,6 @@ def main():
 
                 if global_step >= args.max_train_steps:
                     break
-            
-            # NOTE:  Don't think I need to perform validation here
-            # if accelerator.is_main_process:
-            #     if (
-            #         args.validation_prompts is not None
-            #         and epoch % args.validation_epochs == 0
-            #     ):
-            #         if args.use_ema:
-            #             # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
-            #             ema_unet.store(unet.parameters())
-            #             ema_unet.copy_to(unet.parameters())
-            #         log_validation(
-            #             vae,
-            #             text_encoder,
-            #             tokenizer,
-            #             unet,
-            #             args,
-            #             accelerator,
-            #             weight_dtype,
-            #             global_step,
-            #         )
-            #         if args.use_ema:
-            #             # Switch back to the original UNet parameters.
-            #             ema_unet.restore(unet.parameters())
 
         # Create the pipeline using the trained modules and save it.
         accelerator.wait_for_everyone()
@@ -1048,44 +1029,6 @@ def main():
                     cache_dir=args.cache_dir
                 )
                 pipeline.save_pretrained(args.output_dir)
-
-            # NOTE: No Need to perform the final inference step either
-
-            # Run a final round of inference.
-            # images = []
-            # if args.validation_prompts is not None:
-            #     logger.info("Running inference for collecting generated images...")
-            #     pipeline = pipeline.to(accelerator.device)
-            #     pipeline.torch_dtype = weight_dtype
-            #     pipeline.set_progress_bar_config(disable=True)
-
-            #     if args.enable_xformers_memory_efficient_attention:
-            #         pipeline.enable_xformers_memory_efficient_attention()
-
-            #     if args.seed is None:
-            #         generator = None
-            #     else:
-            #         generator = torch.Generator(device=accelerator.device).manual_seed(
-            #             args.seed
-            #         )
-
-            #     for i in range(len(args.validation_prompts)):
-            #         with torch.autocast("cuda"):
-            #             image = pipeline(
-            #                 args.validation_prompts[i],
-            #                 num_inference_steps=50,
-            #                 generator=generator,
-            #             ).images[0]
-            #         images.append(image)
-
-            # if args.push_to_hub:
-            #     save_model_card(args, repo_id, images, repo_folder=args.output_dir)
-            #     upload_folder(
-            #         repo_id=repo_id,
-            #         folder_path=args.output_dir,
-            #         commit_message="End of training",
-            #         ignore_patterns=["step_*", "epoch_*"],
-            #     )
 
         accelerator.end_training()
     else:

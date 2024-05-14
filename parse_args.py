@@ -377,7 +377,7 @@ def parse_args():
     ## For ICLR 2024 mitigation strategy
     parser.add_argument(
         "--mitigation_threshold",
-        type=float,
+        # type=float,                   # Can be a float or auto
         default=None,
     )
 
