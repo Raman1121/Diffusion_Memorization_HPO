@@ -342,7 +342,10 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
         elif(args.objective_metric == 'avg_norm' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID'):
             memorization_metric = (torch.sum(noise_pred_text_norm).cpu()/len(timesteps)).item()
 
-        memorization_metric_global += memorization_metric
+        if(args.objective_metric == 'FID'):
+            memorization_metric = np.nan
+        else:
+            memorization_metric_global += memorization_metric
         
         if args.snr_gamma is None:
             loss = F.mse_loss(
@@ -1494,6 +1497,8 @@ def objective(trial):
             _row = list(_bm) + [args.learning_rate, memorization_metric, fid_score, end_time - start_time]
         elif(args.objective_metric == 'FID_MIFID'):
             _row = list(_bm) + [args.learning_rate, mifid_score, fid_score, end_time - start_time]
+        elif(args.objective_metric == 'FID'):
+            _row = list(_bm) + [args.learning_rate, np.nan, fid_score, end_time - start_time]
 
         logs_df.loc[len(logs_df)] = _row
         logs_df.to_csv(os.path.join(logs_savedir, "logs.csv"), index=False)

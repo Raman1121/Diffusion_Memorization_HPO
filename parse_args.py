@@ -448,7 +448,8 @@ def parse_args():
             "avg_norm",
             "max_norm_FID",
             "avg_norm_FID",
-            "FID_MIFID"
+            "FID_MIFID",
+            "FID"
         ],
     )
     parser.add_argument("--num_trials", type=int, default=5)
