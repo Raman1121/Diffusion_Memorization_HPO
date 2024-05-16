@@ -387,20 +387,21 @@ def prepare_memorization_data(args, tokenizer):
     with open("data_config.yaml") as file:
         yaml_data = yaml.safe_load(file)
 
-    args.original_train_data_path = yaml_data["train_csv"]
-    args.memorization_data_path = yaml_data["memorization_csv"]
-    args.test_data_path = yaml_data["test_csv"]
+    args.original_train_data_path = yaml_data[args.dataset]["train_csv"]
+    args.memorization_data_path = yaml_data[args.dataset]["memorization_csv"]
+    args.test_data_path = yaml_data[args.dataset]["test_csv"]
 
-    mem_df = pd.read_excel(args.memorization_data_path)
-    test_df = pd.read_excel(args.test_data_path)
+    if(args.dataset == 'MIMIC'):
+        mem_df = pd.read_excel(args.memorization_data_path)
+        test_df = pd.read_excel(args.test_data_path)
 
     # try:
     #     MEMORIZATION_PROMPTS = mem_df["text"].tolist()[:10] # Selecting top 10 prompts from the memorization dataset for MIFID calculation
     # except:
     #     MEMORIZATION_PROMPTS = mem_df["text"].tolist()
 
-    args.images_path_train = Path(yaml_data["images_path_train"])
-    args.images_path_val = Path(yaml_data["images_path_val"])
+    args.images_path_train = Path(yaml_data[args.dataset]["images_path_train"])
+    args.images_path_val = Path(yaml_data[args.dataset]["images_path_val"])
 
     train_transforms = transforms.Compose(
         [

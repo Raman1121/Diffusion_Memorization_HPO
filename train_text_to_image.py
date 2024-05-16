@@ -58,6 +58,7 @@ from svdiff.utils import save_unet_svdiff, save_text_encoder_svdiff
 
 import yaml
 from get_dataset_mimic_cxr import MimicCXRDataset
+from imagenette_dataset import ImagenetteDataset
 from adaptors import *
 from parse_args import parse_args
 
@@ -248,12 +249,14 @@ def main():
     with open("data_config.yaml") as file:
         yaml_data = yaml.safe_load(file)
 
-    args.train_data_path = yaml_data["train_csv"]
-    args.val_data_path = yaml_data["val_csv"]
-    args.test_data_path = yaml_data["test_csv"]
+    args.train_data_path = yaml_data[args.dataset]["train_csv"]
+    args.val_data_path = yaml_data[args.dataset]["val_csv"]
 
-    args.images_path_train = Path(yaml_data["images_path_train"])
-    args.images_path_val = Path(yaml_data["images_path_val"])
+    if(args.dataset == 'MIMIC'):
+        args.test_data_path = yaml_data[args.dataset]["test_csv"]
+
+    args.images_path_train = Path(yaml_data[args.dataset]["images_path_train"])
+    args.images_path_val = Path(yaml_data[args.dataset]["images_path_val"])
 
     print("Train Data CSV: {}".format(args.train_data_path))
 
@@ -614,30 +617,52 @@ def main():
             ]
         )
 
-    train_dataset = MimicCXRDataset(
-        csv_file=args.train_data_path,
-        images_dir=args.images_path_train,
-        tokenizer=tokenizer,
-        transform=train_transforms,
-        seed=args.dataset_split_seed,
-        dataset_size_ratio=args.data_size_ratio,
-        use_real_images=True,
-        use_random_word_addition=args.use_random_word_addition,
-    )
-    val_dataset = MimicCXRDataset(
-        csv_file=args.val_data_path,
-        images_dir=args.images_path_val,
-        tokenizer=tokenizer,
-        transform=val_transforms,
-        seed=args.dataset_split_seed,
-    )
-    test_dataset = MimicCXRDataset(
-        csv_file=args.test_data_path,
-        images_dir=args.images_path_val,
-        tokenizer=tokenizer,
-        transform=val_transforms,
-        seed=args.dataset_split_seed,
-    )
+    if(args.dataset == 'MIMIC'):
+        train_dataset = MimicCXRDataset(
+            csv_file=args.train_data_path,
+            images_dir=args.images_path_train,
+            tokenizer=tokenizer,
+            transform=train_transforms,
+            seed=args.dataset_split_seed,
+            dataset_size_ratio=args.data_size_ratio,
+            use_real_images=True,
+            use_random_word_addition=args.use_random_word_addition,
+        )
+        val_dataset = MimicCXRDataset(
+            csv_file=args.val_data_path,
+            images_dir=args.images_path_val,
+            tokenizer=tokenizer,
+            transform=val_transforms,
+            seed=args.dataset_split_seed,
+        )
+        test_dataset = MimicCXRDataset(
+            csv_file=args.test_data_path,
+            images_dir=args.images_path_val,
+            tokenizer=tokenizer,
+            transform=val_transforms,
+            seed=args.dataset_split_seed,
+        )
+    elif(args.dataset == 'imagenette'):
+        train_dataset = ImagenetteDataset(
+            csv_file=args.train_data_path,
+            root_path=args.images_path_train,
+            tokenizer=tokenizer,
+            transform=train_transforms,
+            use_random_word_addition=args.use_random_word_addition
+        )
+        val_dataset = ImagenetteDataset(
+            csv_file=args.val_data_path,
+            root_path=args.images_path_val,
+            tokenizer=tokenizer,
+            transform=val_transforms,
+        )
+        # test_dataset = ImagenetteDataset(
+        #     csv_file=args.test_data_path,
+        #     root_path=args.images_path_val,
+        #     tokenizer=tokenizer,
+        #     transform=val_transforms,
+        # )
+
 
     # DataLoaders creation:
     train_dataloader = torch.utils.data.DataLoader(
@@ -652,12 +677,13 @@ def main():
         batch_size=args.train_batch_size,
         num_workers=args.dataloader_num_workers,
     )
-    test_dataloader = torch.utils.data.DataLoader(
-        test_dataset,
-        shuffle=False,
-        batch_size=args.train_batch_size,
-        num_workers=args.dataloader_num_workers,
-    )
+    if(args.dataset == 'MIMIC'):
+        test_dataloader = torch.utils.data.DataLoader(
+            test_dataset,
+            shuffle=False,
+            batch_size=args.train_batch_size,
+            num_workers=args.dataloader_num_workers,
+        )
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
@@ -723,7 +749,7 @@ def main():
     logger.info("***** Running training *****")
     logger.info(f"  Num examples (train) = {len(train_dataset)}")
     logger.info(f"  Num examples (val) = {len(val_dataset)}")
-    logger.info(f"  Num examples (test) = {len(test_dataset)}")
+    # logger.info(f"  Num examples (test) = {len(test_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
     logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
     logger.info(
