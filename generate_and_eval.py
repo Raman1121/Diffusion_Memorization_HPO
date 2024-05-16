@@ -149,6 +149,7 @@ def generate_and_eval(args):
         print("Generating images using prompts from TRAINING DATA")
         args["prompts_path"] = yaml_data[args["dataset"]]["train_csv"] 
 
+    
     elif(args["run_eval_on"] == 'test'):
         print("Generating images using prompts from TEST DATA")
 
@@ -156,6 +157,7 @@ def generate_and_eval(args):
             args["prompts_path"] = yaml_data[args["dataset"]]["test_csv"]
         elif(args["dataset"] == 'imagenette'):
             args["prompts_path"] = yaml_data[args["dataset"]]["val_csv"]
+    
         else:
             raise ValueError("Invalid value for dataset. Select from 'MIMIC' or 'imagenette' only.")
     else:
@@ -176,8 +178,13 @@ def generate_and_eval(args):
         random.seed(seed)
 
         # Subset the dataframe (1000 samples) randomly according to the seed
-        df = pd.read_excel(args["prompts_path"])
-        df['path'] = df['path'].apply(lambda x: os.path.join(yaml_data["images_path_train"], x))
+
+        if(args["dataset"] == 'MIMIC'):
+            df = pd.read_excel(args["prompts_path"])
+        elif(args["dataset"] == 'imagenette'):
+            df = pd.read_csv(args["prompts_path"])
+
+        df['path'] = df['path'].apply(lambda x: os.path.join(yaml_data[args["dataset"]]["images_path_train"], x))
         # df = df.sample(n=args["num_images_to_generate"], random_state=seed)
         # Sample first 1000 samples
         df = df.iloc[:1000]
