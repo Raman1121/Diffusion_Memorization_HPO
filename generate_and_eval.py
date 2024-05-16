@@ -147,10 +147,17 @@ def generate_and_eval(args):
 
     if(args["run_eval_on"] == 'train'):
         print("Generating images using prompts from TRAINING DATA")
-        args["prompts_path"] = yaml_data["train_csv"] 
+        args["prompts_path"] = yaml_data[args["dataset"]]["train_csv"] 
+
     elif(args["run_eval_on"] == 'test'):
         print("Generating images using prompts from TEST DATA")
-        args["prompts_path"] = yaml_data["test_csv"]
+
+        if(args["dataset"] == 'MIMIC'):
+            args["prompts_path"] = yaml_data[args["dataset"]]["test_csv"]
+        elif(args["dataset"] == 'imagenette'):
+            args["prompts_path"] = yaml_data[args["dataset"]]["val_csv"]
+        else:
+            raise ValueError("Invalid value for dataset. Select from 'MIMIC' or 'imagenette' only.")
     else:
         raise ValueError("Invalid value for run_eval_on. Select from 'train' or 'test' only.")
 
