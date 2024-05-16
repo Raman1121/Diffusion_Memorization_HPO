@@ -238,7 +238,7 @@ def generate_and_eval(args):
         results_df.loc[len(results_df)] = _row
 
         if(args["use_random_word_addition"]):
-            results_df.to_csv(os.path.join(args["results_savedir"], "results_RWA_MIFID.csv"), index=False)
+            results_df.to_csv(os.path.join(args["results_savedir"], "results_MIFID.csv"), index=False)
         else:
             results_df.to_csv(os.path.join(args["results_savedir"], "results_MIFID.csv"), index=False)
 
@@ -253,7 +253,7 @@ def generate_and_eval(args):
         results_df.loc[len(results_df)] = _row
 
         if(args["use_random_word_addition"]):
-            results_df.to_csv(os.path.join(args["results_savedir"], "results_RWA_FID.csv"), index=False)
+            results_df.to_csv(os.path.join(args["results_savedir"], "results_FID.csv"), index=False)
         else:
             results_df.to_csv(os.path.join(args["results_savedir"], "results_FID.csv"), index=False)
 
