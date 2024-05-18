@@ -75,7 +75,7 @@ def evaluate(args, pipe):
     except:
         df = pd.read_excel(args.train_df)
 
-    df = df.iloc[:10]
+    df = df.iloc[:1000]
     df = df.reset_index(drop=True)
 
     image_paths = df['path'].tolist()
