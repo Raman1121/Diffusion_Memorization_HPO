@@ -9,6 +9,64 @@ from datetime import datetime
 import os
 import pandas as pd
 
+from svdiff.utils import (
+    load_unet_for_svdiff,
+    load_text_encoder_for_svdiff,
+    SCHEDULER_MAPPING,
+)
+from safetensors.torch import load_file
+
+def load_adapted_unet(args, exp_path, pipe):
+    args = vars(args)
+    sd_folder_path = args["pretrained_model_name_or_path"]
+
+    if args["unet_pretraining_type"] == "freeze":
+        pass
+    
+    elif(args["unet_pretraining_type"] == "svdiff" or args["unet_pretraining_type"] == "auto_svdiff"):
+        print("SV-DIFF UNET")
+
+        pipe.unet = load_unet_for_svdiff(
+            sd_folder_path,
+            spectral_shifts_ckpt=os.path.join(os.path.join(exp_path, 'unet'), "spectral_shifts.safetensors"),
+            subfolder="unet",
+        )
+        for module in pipe.unet.modules():
+            if hasattr(module, "perform_svd"):
+                module.perform_svd()
+
+    else:
+        try:
+            exp_path = os.path.join(exp_path, 'unet', 'diffusion_pytorch_model.safetensors')
+            state_dict = load_file(exp_path)
+            print(pipe.unet.load_state_dict(state_dict, strict=False))
+        except:
+            import pdb; pdb.set_trace()
+
+def loadSDModel(args, exp_path):
+
+    # device = f"cuda:{cuda_device}" if torch.cuda.is_available() else "cpu"
+    # device = "cuda:1"
+
+    args = vars(args)
+    sd_folder_path = args["pretrained_model_name_or_path"]
+
+    pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", revision=args["mixed_precision"])
+
+    if(args["unet_pretraining_type"] != "freeze"):
+        load_adapted_unet(args, exp_path, pipe)
+    else:
+        pass
+
+    # pipe.to('cuda')
+    # pipe.to(torch.float16)
+    pipe.safety_checker = None
+    pipe.requires_safety_checker = False
+
+    tunable_params = check_tunable_params(pipe.unet, False)
+
+    return pipe, tunable_params
+
 def evaluate(args, pipe):
     
     # Read the training df here
@@ -155,10 +213,13 @@ if __name__ == "__main__":
     parser.add_argument("--train_df", type=str, default="/raid/s2198939/MIMIC_Dataset/physionet.org/files/mimic-cxr-jpg/2.0.0/Prepared_CSVs/FINAL_TRAIN.xlsx")
     parser.add_argument("--samples_root", type=str, default="/raid/s2198939/MIMIC_Dataset/physionet.org/files/mimic-cxr-jpg/2.0.0")
     parser.add_argument("--output_dir", type=str, default="", required=True)
+    parser.add_argument("--unet_pretraining_type", type=str, default="full", required=True)
 
     args = parser.parse_args()
 
-    pipe = StableDiffusionPipeline.from_pretrained(args.output_dir, torch_dtype=torch.float32, safety_checker = None, requires_safety_checker = False)
+    # pipe = StableDiffusionPipeline.from_pretrained(args.output_dir, torch_dtype=torch.float32, safety_checker = None, requires_safety_checker = False)
+    print("PEFT TYPE: " args.unet_pretraining_type)
+    pipe, tunable_params = loadSDModel(args, args.output_dir)
     pipe = pipe.to("cuda")
 
     memorized_images, similar_images, stats = evaluate(args, pipe)
