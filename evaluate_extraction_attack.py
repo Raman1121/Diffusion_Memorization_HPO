@@ -17,8 +17,9 @@ from svdiff.utils import (
 from safetensors.torch import load_file
 
 def load_adapted_unet(args, exp_path, pipe):
-    args = vars(args)
-    sd_folder_path = args["pretrained_model_name_or_path"]
+    # args = vars(args)
+    # sd_folder_path = args["pretrained_model_name_or_path"]
+    sd_folder_path =  "runwayml/stable-diffusion-v1-5"
 
     if args["unet_pretraining_type"] == "freeze":
         pass
@@ -48,10 +49,11 @@ def loadSDModel(args, exp_path):
     # device = f"cuda:{cuda_device}" if torch.cuda.is_available() else "cpu"
     # device = "cuda:1"
 
-    args = vars(args)
-    sd_folder_path = args["pretrained_model_name_or_path"]
+    # args = vars(args)
+    # sd_folder_path = args["pretrained_model_name_or_path"]
+    sd_folder_path =  "runwayml/stable-diffusion-v1-5"
 
-    pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", revision=args["mixed_precision"])
+    pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", revision=None)
 
     if(args["unet_pretraining_type"] != "freeze"):
         load_adapted_unet(args, exp_path, pipe)
@@ -63,9 +65,9 @@ def loadSDModel(args, exp_path):
     pipe.safety_checker = None
     pipe.requires_safety_checker = False
 
-    tunable_params = check_tunable_params(pipe.unet, False)
+    # tunable_params = check_tunable_params(pipe.unet, False)
 
-    return pipe, tunable_params
+    return pipe
 
 def evaluate(args, pipe):
     
@@ -217,9 +219,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # import pdb; pdb.set_trace()
+
     # pipe = StableDiffusionPipeline.from_pretrained(args.output_dir, torch_dtype=torch.float32, safety_checker = None, requires_safety_checker = False)
-    print("PEFT TYPE: " args.unet_pretraining_type)
-    pipe, tunable_params = loadSDModel(args, args.output_dir)
+    print("PEFT TYPE: ", args.unet_pretraining_type)
+    pipe = loadSDModel(vars(args), args.output_dir)
     pipe = pipe.to("cuda")
 
     memorized_images, similar_images, stats = evaluate(args, pipe)
