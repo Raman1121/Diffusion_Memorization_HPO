@@ -12,8 +12,10 @@ from local_sd_pipeline import LocalStableDiffusionPipeline
 from diffusers import DDIMScheduler, UNet2DConditionModel
 
 import yaml
+
 # from parse_args import get_config
 from get_dataset_mimic_cxr import MimicCXRDataset
+
 
 def main(args):
     # load diffusion model
@@ -66,38 +68,40 @@ def main(args):
     args.images_path_train = Path(yaml_data["images_path_train"])
     args.images_path_val = Path(yaml_data["images_path_val"])
 
-    if(args.run_on_frequent_samples or args.run_on_rare_samples):
+    if args.run_on_frequent_samples or args.run_on_rare_samples:
         # df = pd.read_excel(args.train_data_path)
         print("Reading Counts Dataframe")
         df = pd.read_csv(args.counts_data_path)
-        ALL_COUNTS = df['Count'].to_list()
-        ALL_UNIQUE_PROMPTS = list(set(df['Text'].tolist()))
+        ALL_COUNTS = df["Count"].to_list()
+        ALL_UNIQUE_PROMPTS = list(set(df["Text"].tolist()))
     else:
         df = pd.read_excel(args.train_data_path)
 
-    if(args.use_findings):
-        ALL_UNIQUE_PROMPTS = list(set(df['findings'].tolist()))
+    if args.use_findings:
+        ALL_UNIQUE_PROMPTS = list(set(df["findings"].tolist()))
     else:
-        if(args.run_on_frequent_samples):
-            if(args.by_percentile):
-                percentile_index = int(len(ALL_COUNTS) * 0.05)  # Selecting prompts in the top 5 percentile by frequncy
+        if args.run_on_frequent_samples:
+            if args.by_percentile:
+                percentile_index = int(
+                    len(ALL_COUNTS) * 0.05
+                )  # Selecting prompts in the top 5 percentile by frequncy
                 ALL_UNIQUE_PROMPTS = ALL_UNIQUE_PROMPTS[:percentile_index]
             else:
-                ALL_UNIQUE_PROMPTS = list(set(df['Text'].tolist()))
+                ALL_UNIQUE_PROMPTS = list(set(df["Text"].tolist()))
                 # Select top 50
                 ALL_UNIQUE_PROMPTS = ALL_UNIQUE_PROMPTS[:50]
-        elif(args.run_on_rare_samples):
-            if(args.by_percentile):
-                percentile_index = int(len(ALL_COUNTS) * 0.05) 
+        elif args.run_on_rare_samples:
+            if args.by_percentile:
+                percentile_index = int(len(ALL_COUNTS) * 0.05)
                 ALL_UNIQUE_PROMPTS = ALL_UNIQUE_PROMPTS[-percentile_index:]
             else:
-                ALL_UNIQUE_PROMPTS = list(set(df['Text'].tolist()))
+                ALL_UNIQUE_PROMPTS = list(set(df["Text"].tolist()))
                 # Select bottom 50
                 ALL_UNIQUE_PROMPTS = ALL_UNIQUE_PROMPTS[-50:]
         else:
-            ALL_UNIQUE_PROMPTS = list(set(df['text'].tolist()))
+            ALL_UNIQUE_PROMPTS = list(set(df["text"].tolist()))
 
-    if(args.run_on_full_dataset):
+    if args.run_on_full_dataset:
         args.end = len(ALL_UNIQUE_PROMPTS)
     else:
         args.end = min(args.end, len(df))
@@ -148,13 +152,23 @@ def main(args):
     os.makedirs("det_outputs", exist_ok=True)
     # write_jsonlines(all_tracks, f"det_outputs/{args.run_name}.jsonl")
 
-    if(args.run_on_frequent_samples):
-        write_jsonlines(all_tracks, "det_outputs/{}_frequent.jsonl".format(args.run_name + "_" + args.peft_method))
-    elif(args.run_on_rare_samples):
-        write_jsonlines(all_tracks, "det_outputs/{}_rare.jsonl".format(args.run_name + "_" + args.peft_method))
+    if args.run_on_frequent_samples:
+        write_jsonlines(
+            all_tracks,
+            "det_outputs/{}_frequent.jsonl".format(
+                args.run_name + "_" + args.peft_method
+            ),
+        )
+    elif args.run_on_rare_samples:
+        write_jsonlines(
+            all_tracks,
+            "det_outputs/{}_rare.jsonl".format(args.run_name + "_" + args.peft_method),
+        )
     else:
-        write_jsonlines(all_tracks, "det_outputs/{}.jsonl".format(args.run_name + "_" + args.peft_method))
-
+        write_jsonlines(
+            all_tracks,
+            "det_outputs/{}.jsonl".format(args.run_name + "_" + args.peft_method),
+        )
 
 
 if __name__ == "__main__":
@@ -166,7 +180,7 @@ if __name__ == "__main__":
     parser.add_argument("--image_length", default=512, type=int)
     parser.add_argument("--model_id", default="CompVis/stable-diffusion-v1-4")
     parser.add_argument("--unet_id", default=None)
-    parser.add_argument("--peft_method", type=str, default='full')
+    parser.add_argument("--peft_method", type=str, default="full")
     parser.add_argument("--with_tracking", action="store_true")
     parser.add_argument("--num_images_per_prompt", default=4, type=int)
     parser.add_argument("--guidance_scale", default=7.5, type=float)

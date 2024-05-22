@@ -30,8 +30,13 @@ from svdiff.utils import (
 )
 from diffusers.loaders import AttnProcsLayers
 
-from difffit.unet_2d_condition import UNet2DConditionModel as UNet2DConditionModelForDiffFit
-from difffit.attention_processor import DiffFitAttnProcessor, DiffFitXFormersAttnProcessor
+from difffit.unet_2d_condition import (
+    UNet2DConditionModel as UNet2DConditionModelForDiffFit,
+)
+from difffit.attention_processor import (
+    DiffFitAttnProcessor,
+    DiffFitXFormersAttnProcessor,
+)
 from difffit.modeling_clip import CLIPTextModel as CLIPTextModelForDiffFit
 
 # from Scale_Shift_Features.unet_2d_condition import UNet2DConditionModel as UNet2DConditionModelForSSF
@@ -57,20 +62,24 @@ def disable_grad(module):
     for p in module.parameters():
         p.requires_grad = False
 
+
 def disable_grad_svdiff(module):
-    for n,p in module.named_parameters():
-        if("delta" in n):
+    for n, p in module.named_parameters():
+        if "delta" in n:
             p.requires_grad = False
+
 
 def disable_grad_difffit(module):
-    for n,p in module.named_parameters():
-        if("gamma_" in n):
+    for n, p in module.named_parameters():
+        if "gamma_" in n:
             p.requires_grad = False
 
+
 def disable_grad_attention(module):
-    for n,p in module.named_parameters():
-        if("attn" in n):
+    for n, p in module.named_parameters():
+        if "attn" in n:
             p.requires_grad = False
+
 
 def set_module_grad_status(module, flag=False):
     if isinstance(module, list):
@@ -86,12 +95,13 @@ def set_module_grad_status(module, flag=False):
 def return_param_sum(model, verbose=False):
     total_magnitude = 0
     # print("Calculating sum of trainable parameters")
-    
+
     for p in model.parameters():
         if p.requires_grad:
             total_magnitude += p.sum().item()
 
     return round(total_magnitude, 3)
+
 
 def return_blockwise_param_sum(model, verbose=False):
 
@@ -101,26 +111,29 @@ def return_blockwise_param_sum(model, verbose=False):
 
     # print("Calculating the sum of parameters in U-net Down Blocks")
     for idx, block in enumerate(model.down_blocks):
-        sum_dict_down_blocks['ALL_Down_Block_'+str(idx)] = return_param_sum(block, False)
+        sum_dict_down_blocks["ALL_Down_Block_" + str(idx)] = return_param_sum(
+            block, False
+        )
 
     # print("Calculating the sum of parameters in U-net Mid Block")
-    sum_dict_mid_block['ALL_Mid_Block'] = return_param_sum(model.mid_block)
+    sum_dict_mid_block["ALL_Mid_Block"] = return_param_sum(model.mid_block)
 
     # print("Calculating the sum of parameters in U-net Up Blocks")
     for idx, block in enumerate(model.up_blocks):
-        sum_dict_up_blocks['ALL_Up_Block_'+str(idx)] = return_param_sum(block, False)
+        sum_dict_up_blocks["ALL_Up_Block_" + str(idx)] = return_param_sum(block, False)
 
     return sum_dict_down_blocks, sum_dict_mid_block, sum_dict_up_blocks
-    
+
 
 def return_norm_param_sum(model, verbose=False):
     total_magnitude = 0
-    
-    for n,p in model.named_parameters():
+
+    for n, p in model.named_parameters():
         if p.requires_grad and "norm" in n:
             total_magnitude += p.sum().item()
 
     return round(total_magnitude, 3)
+
 
 def return_blockwise_norm_param_sum(model, verbose=False):
 
@@ -130,25 +143,31 @@ def return_blockwise_norm_param_sum(model, verbose=False):
 
     # print("Calculating the sum of NORM parameters in U-net Down Blocks")
     for idx, block in enumerate(model.down_blocks):
-        sum_dict_down_blocks['NORM_Down_Block_'+str(idx)] = return_norm_param_sum(block, False)
+        sum_dict_down_blocks["NORM_Down_Block_" + str(idx)] = return_norm_param_sum(
+            block, False
+        )
 
     # print("Calculating the sum of NORM parameters in U-net Mid Block")
-    sum_dict_mid_block['NORM_Mid_Block'] = return_norm_param_sum(model.mid_block)
+    sum_dict_mid_block["NORM_Mid_Block"] = return_norm_param_sum(model.mid_block)
 
     # print("Calculating the sum of NORM parameters in U-net Up Blocks")
     for idx, block in enumerate(model.up_blocks):
-        sum_dict_up_blocks['NORM_Up_Block_'+str(idx)] = return_norm_param_sum(block, False)
+        sum_dict_up_blocks["NORM_Up_Block_" + str(idx)] = return_norm_param_sum(
+            block, False
+        )
 
     return sum_dict_down_blocks, sum_dict_mid_block, sum_dict_up_blocks
 
+
 def return_bias_param_sum(model, verbose=False):
     total_magnitude = 0
-    
-    for n,p in model.named_parameters():
+
+    for n, p in model.named_parameters():
         if p.requires_grad and "bias" in n:
             total_magnitude += p.sum().item()
 
     return round(total_magnitude, 3)
+
 
 def return_blockwise_bias_param_sum(model, verbose=False):
 
@@ -158,25 +177,31 @@ def return_blockwise_bias_param_sum(model, verbose=False):
 
     # print("Calculating the sum of BIAS parameters in U-net Down Blocks")
     for idx, block in enumerate(model.down_blocks):
-        sum_dict_down_blocks['BIAS_Down_Block_'+str(idx)] = return_bias_param_sum(block, False)
+        sum_dict_down_blocks["BIAS_Down_Block_" + str(idx)] = return_bias_param_sum(
+            block, False
+        )
 
     # print("Calculating the sum of BIAS parameters in U-net Mid Block")
-    sum_dict_mid_block['BIAS_Mid_Block'] = return_bias_param_sum(model.mid_block)
+    sum_dict_mid_block["BIAS_Mid_Block"] = return_bias_param_sum(model.mid_block)
 
     # print("Calculating the sum of BIAS parameters in U-net Up Blocks")
     for idx, block in enumerate(model.up_blocks):
-        sum_dict_up_blocks['BIAS_Up_Block_'+str(idx)] = return_bias_param_sum(block, False)
+        sum_dict_up_blocks["BIAS_Up_Block_" + str(idx)] = return_bias_param_sum(
+            block, False
+        )
 
     return sum_dict_down_blocks, sum_dict_mid_block, sum_dict_up_blocks
 
+
 def return_attn_param_sum(model, verbose=False):
     total_magnitude = 0
-    
-    for n,p in model.named_parameters():
+
+    for n, p in model.named_parameters():
         if p.requires_grad and "attentions" in n:
             total_magnitude += p.sum().item()
 
     return round(total_magnitude, 3)
+
 
 def return_blockwise_attn_param_sum(model, verbose=False):
 
@@ -186,16 +211,21 @@ def return_blockwise_attn_param_sum(model, verbose=False):
 
     # print("Calculating the sum of ATTENTION parameters in U-net Down Blocks")
     for idx, block in enumerate(model.down_blocks):
-        sum_dict_down_blocks['ATTN_Down_Block_'+str(idx)] = return_attn_param_sum(block, False)
+        sum_dict_down_blocks["ATTN_Down_Block_" + str(idx)] = return_attn_param_sum(
+            block, False
+        )
 
     # print("Calculating the sum of ATTENTION parameters in U-net Mid Block")
-    sum_dict_mid_block['ATTN_Mid_Block'] = return_attn_param_sum(model.mid_block)
+    sum_dict_mid_block["ATTN_Mid_Block"] = return_attn_param_sum(model.mid_block)
 
     # print("Calculating the sum of ATTENTION parameters in U-net Up Blocks")
     for idx, block in enumerate(model.up_blocks):
-        sum_dict_up_blocks['ATTN_Up_Block_'+str(idx)] = return_attn_param_sum(block, False)
+        sum_dict_up_blocks["ATTN_Up_Block_" + str(idx)] = return_attn_param_sum(
+            block, False
+        )
 
     return sum_dict_down_blocks, sum_dict_mid_block, sum_dict_up_blocks
+
 
 def check_params(model):
     print("The following parameters are trainable:")
@@ -474,7 +504,10 @@ def apply_lora_to_unetv2(unet, image_lora_rank, dtype):
             hidden_size = unet.config.block_out_channels[block_id]
 
         lora_attn_procs[name] = LoRAAttnProcessor(
-            hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, rank=image_lora_rank, dtype=dtype
+            hidden_size=hidden_size,
+            cross_attention_dim=cross_attention_dim,
+            rank=image_lora_rank,
+            dtype=dtype,
         )
 
     unet.set_attn_processor(lora_attn_procs)
@@ -487,12 +520,14 @@ def apply_svdiff_to_unet(args, cache_dir):
 
     # Adapted from https://github.com/mkshing/svdiff-pytorch/blob/a78f69e14410c1963318806050a566d262eca9f8/train_svdiff.py#L717
 
-    if(args is not None):
+    if args is not None:
         pretrained_model_name_or_path = args.pretrained_model_name_or_path
     else:
         pretrained_model_name_or_path = "runwayml/stable-diffusion-v1-5"
-        
-    unet = load_unet_for_svdiff(pretrained_model_name_or_path, subfolder="unet", cache_dir=cache_dir)
+
+    unet = load_unet_for_svdiff(
+        pretrained_model_name_or_path, subfolder="unet", cache_dir=cache_dir
+    )
 
     unet.requires_grad_(False)
     optim_params = []
@@ -531,7 +566,6 @@ def apply_svdiff_to_text_encoder(args):
 
 
 def apply_lora_to_text_encoder(text_encoder, text_lora_rank=16, lora_config=None):
-
     """
     Usage:
             pipe.text_encoder = apply_lora_to_text_encoder(pipe.text_encoder)
@@ -590,9 +624,10 @@ def enable_bias_update(model):
             if name == "bias":
                 param.requires_grad = True
 
+
 def mark_only_biases_as_trainable(model: nn.Module, is_bitfit=False):
-    
-    trainable_names = ["bias","norm","gamma","y_embed"]
+
+    trainable_names = ["bias", "norm", "gamma", "y_embed"]
 
     for par_name, par_tensor in model.named_parameters():
         par_tensor.requires_grad = any([kw in par_name for kw in trainable_names])
@@ -615,6 +650,7 @@ def enable_attention_update(model):
             if "attentions" in name:
                 param.requires_grad = True
 
+
 def disable_attention_update(model):
     print("Disabling Attention layers")
     for m in model.modules():
@@ -622,18 +658,18 @@ def disable_attention_update(model):
             if "attentions" in name:
                 param.requires_grad = False
 
+
 def enable_blockwise_attention_update(unet, block_idx=None):
 
-    if(block_idx is not None):
+    if block_idx is not None:
         assert block_idx <= 3, "Block index should be between 0 and 3"
 
-    if(block_idx is None):
+    if block_idx is None:
         # Update all blocks
         enable_attention_update(unet)
     else:
         # Update only the specified block
         enable_attention_update(unet[block_idx])
-
 
 
 def enable_attention_update_text_encoder(text_encoder):
@@ -642,6 +678,7 @@ def enable_attention_update_text_encoder(text_encoder):
         if "self_attn" in n:
             p.requires_grad = True
 
+
 def get_adapted_unet(unet, method, args, **kwargs):
     if method == "attention":
         disable_grad(unet)
@@ -649,11 +686,15 @@ def get_adapted_unet(unet, method, args, **kwargs):
         verbose = True
     elif method == "attention_down_blocks":
         disable_grad(unet)
-        enable_blockwise_attention_update(unet.down_blocks, block_idx=kwargs["unet_block_idx"])
+        enable_blockwise_attention_update(
+            unet.down_blocks, block_idx=kwargs["unet_block_idx"]
+        )
         verbose = True
     elif method == "attention_up_blocks":
         disable_grad(unet)
-        enable_blockwise_attention_update(unet.up_blocks, block_idx=kwargs["unet_block_idx"])
+        enable_blockwise_attention_update(
+            unet.up_blocks, block_idx=kwargs["unet_block_idx"]
+        )
         verbose = True
     elif method == "norm":
         disable_grad(unet)
@@ -678,33 +719,37 @@ def get_adapted_unet(unet, method, args, **kwargs):
         unet = apply_lora_to_unet(unet)
         verbose = True
     elif method == "lorav2":
-        unet, lora_layers = apply_lora_to_unetv2(unet, image_lora_rank=kwargs["image_lora_rank"], dtype=kwargs["dtype"])
+        unet, lora_layers = apply_lora_to_unetv2(
+            unet, image_lora_rank=kwargs["image_lora_rank"], dtype=kwargs["dtype"]
+        )
         return unet, lora_layers
     elif method == "svdiff":
-        unet, optim_params, optim_params_1d = apply_svdiff_to_unet(args=args, cache_dir=kwargs["cache_dir"])
+        unet, optim_params, optim_params_1d = apply_svdiff_to_unet(
+            args=args, cache_dir=kwargs["cache_dir"]
+        )
         return unet, optim_params, optim_params_1d
-    elif method == 'difffit':
+    elif method == "difffit":
         print("Loading model for DIFFFIT")
         unet = load_unet_for_difffit(
-                pretrained_model_name_or_path=kwargs["pretrained_model_name_or_path"],
-                efficient_weights_ckpt=None,
-                hf_hub_kwargs=None,
-                is_bitfit=False, 
-                cache_dir=kwargs["cache_dir"]
-                )
+            pretrained_model_name_or_path=kwargs["pretrained_model_name_or_path"],
+            efficient_weights_ckpt=None,
+            hf_hub_kwargs=None,
+            is_bitfit=False,
+            cache_dir=kwargs["cache_dir"],
+        )
         unet = mark_only_biases_as_trainable(unet, is_bitfit=False)
 
-    elif method == 'ssf':
+    elif method == "ssf":
 
         unet = load_unet_for_ssf(
-                pretrained_model_name_or_path=kwargs["pretrained_model_name_or_path"],
-                efficient_weights_ckpt=None,
-                hf_hub_kwargs=None,
-                is_bitfit=False, 
-                )
+            pretrained_model_name_or_path=kwargs["pretrained_model_name_or_path"],
+            efficient_weights_ckpt=None,
+            hf_hub_kwargs=None,
+            is_bitfit=False,
+        )
         unet = mark_only_ssf_as_trainable(unet)
 
-    elif method == 'oft':
+    elif method == "oft":
         config_unet = OFTConfig(
             r=args.image_oft_rank,
             target_modules=[
@@ -747,7 +792,7 @@ def get_adapted_unet(unet, method, args, **kwargs):
 
         unet = LoHaModel(unet, config_unet, "default")
 
-    elif method == 'lokr':
+    elif method == "lokr":
         # https://arxiv.org/abs/2108.06098
         # https://arxiv.org/abs/2309.14859
 
@@ -825,7 +870,9 @@ def get_adapted_text_encoder(text_encoder, method, args, **kwargs):
 
     # LORA: https://arxiv.org/abs/2106.09685
     elif method == "lora":
-        text_encoder = apply_lora_to_text_encoder(text_encoder, text_lora_rank=kwargs["text_lora_rank"])
+        text_encoder = apply_lora_to_text_encoder(
+            text_encoder, text_lora_rank=kwargs["text_lora_rank"]
+        )
         verbose = True
 
     elif method == "svdiff":
@@ -834,11 +881,11 @@ def get_adapted_text_encoder(text_encoder, method, args, **kwargs):
 
     elif method == "difffit":
         text_encoder = load_text_encoder_for_difffit(
-                pretrained_model_name_or_path=kwargs["pretrained_model_name_or_path"],
-                efficient_weights_ckpt=None,
-                hf_hub_kwargs=None,
-                is_bitfit=False, 
-                )
+            pretrained_model_name_or_path=kwargs["pretrained_model_name_or_path"],
+            efficient_weights_ckpt=None,
+            hf_hub_kwargs=None,
+            is_bitfit=False,
+        )
         text_encoder = mark_only_biases_as_trainable(text_encoder, is_bitfit=False)
 
     elif method == "full":
@@ -902,30 +949,31 @@ def get_adapted_vae(vae, method):
 
 ############## DiffFit ################
 
+
 def mark_only_biases_as_trainable(model: nn.Module, is_bitfit=False):
-    
-    trainable_names = ["bias","norm","gamma","y_embed"]
+
+    trainable_names = ["bias", "norm", "gamma", "y_embed"]
 
     for par_name, par_tensor in model.named_parameters():
         par_tensor.requires_grad = any([kw in par_name for kw in trainable_names])
 
     return model
 
+
 ############## SSF ################
 
-    
+
 def mark_only_ssf_as_trainable(model):
     print("Enabling shift and scale parameters")
     for m in model.modules():
         for name, param in m.named_parameters():
-            #print(name)
+            # print(name)
             # if "shift" in name or "scale" in name:
             #     param.requires_grad = True
             if "ssf_" in name:
                 param.requires_grad = True
 
     return model
-
 
 
 def get_state_dict(model: nn.Module) -> Dict[str, torch.Tensor]:
@@ -941,29 +989,36 @@ def load_config_for_difffit(model_path, **kwargs):
         if "config.json" not in model_path:
             model_path = os.path.join(model_path, "config.json")
     else:
-        model_path = huggingface_hub.hf_hub_download(model_path, filename="config.json", **kwargs)
+        model_path = huggingface_hub.hf_hub_download(
+            model_path, filename="config.json", **kwargs
+        )
     with open(model_path, "r", encoding="utf-8") as f:
         config = json.load(f)
     return config
 
+
 def load_unet_for_ssf(
     pretrained_model_name_or_path,
-        efficient_weights_ckpt=None, 
-        hf_hub_kwargs=None, 
-        is_bitfit=False, 
-        subfolder='unet',
-        **kwargs
-    ):
+    efficient_weights_ckpt=None,
+    hf_hub_kwargs=None,
+    is_bitfit=False,
+    subfolder="unet",
+    **kwargs,
+):
     # load pre-trained weights
     param_device = "cpu"
     torch_dtype = kwargs["torch_dtype"] if "torch_dtype" in kwargs else None
 
     if not is_bitfit:
-        config = UNet2DConditionModel.load_config(pretrained_model_name_or_path, subfolder=subfolder)
-        original_model = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder)
+        config = UNet2DConditionModel.load_config(
+            pretrained_model_name_or_path, subfolder=subfolder
+        )
+        original_model = UNet2DConditionModel.from_pretrained(
+            pretrained_model_name_or_path, subfolder=subfolder
+        )
         state_dict = original_model.state_dict()
         with accelerate.init_empty_weights():
-            #model = UNet2DConditionModelForDiffFit.from_config(config)
+            # model = UNet2DConditionModelForDiffFit.from_config(config)
             model = UNet2DConditionModelForSSF.from_config(config)
             # Set correct lora layers
             ssf_attn_procs = {}
@@ -972,16 +1027,20 @@ def load_unet_for_ssf(
                     hidden_size = model.config.block_out_channels[-1]
                 elif name.startswith("up_blocks"):
                     block_id = int(name[len("up_blocks.")])
-                    hidden_size = list(reversed(model.config.block_out_channels))[block_id]
+                    hidden_size = list(reversed(model.config.block_out_channels))[
+                        block_id
+                    ]
                 elif name.startswith("down_blocks"):
                     block_id = int(name[len("down_blocks.")])
                     hidden_size = model.config.block_out_channels[block_id]
-                
+
                 ssf_attn_procs[name] = SSFAttnProcessor(hidden_size=hidden_size)
 
             model.set_attn_processor(ssf_attn_procs)
 
-        scale_factor_weights = {n: torch.ones(p.shape) for n, p in model.named_parameters() if "ssf_" in n}
+        scale_factor_weights = {
+            n: torch.ones(p.shape) for n, p in model.named_parameters() if "ssf_" in n
+        }
         state_dict.update(scale_factor_weights)
         # move the params from meta device to cpu
         missing_keys = set(model.state_dict().keys()) - set(state_dict.keys())
@@ -993,35 +1052,59 @@ def load_unet_for_ssf(
                 " those weights or else make sure your checkpoint file is correct."
             )
         for param_name, param in state_dict.items():
-            accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+            accepts_dtype = "dtype" in set(
+                inspect.signature(set_module_tensor_to_device).parameters.keys()
+            )
             if accepts_dtype:
-                set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=torch_dtype)
+                set_module_tensor_to_device(
+                    model, param_name, param_device, value=param, dtype=torch_dtype
+                )
             else:
-                set_module_tensor_to_device(model, param_name, param_device, value=param)
-    
+                set_module_tensor_to_device(
+                    model, param_name, param_device, value=param
+                )
+
     else:
         original_model = None
-        model = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder)
-    
+        model = UNet2DConditionModel.from_pretrained(
+            pretrained_model_name_or_path, subfolder=subfolder
+        )
+
     if efficient_weights_ckpt:
         if os.path.isdir(efficient_weights_ckpt):
-            efficient_weights_ckpt = os.path.join(efficient_weights_ckpt, "efficient_weights.safetensors")
+            efficient_weights_ckpt = os.path.join(
+                efficient_weights_ckpt, "efficient_weights.safetensors"
+            )
         elif not os.path.exists(efficient_weights_ckpt):
             # download from hub
             hf_hub_kwargs = {} if hf_hub_kwargs is None else hf_hub_kwargs
-            efficient_weights_ckpt = huggingface_hub.hf_hub_download(efficient_weights_ckpt, filename="efficient_weights.safetensors", **hf_hub_kwargs)
+            efficient_weights_ckpt = huggingface_hub.hf_hub_download(
+                efficient_weights_ckpt,
+                filename="efficient_weights.safetensors",
+                **hf_hub_kwargs,
+            )
         assert os.path.exists(efficient_weights_ckpt)
 
         with safe_open(efficient_weights_ckpt, framework="pt", device="cpu") as f:
             for key in f.keys():
                 # spectral_shifts_weights[key] = f.get_tensor(key)
-                accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+                accepts_dtype = "dtype" in set(
+                    inspect.signature(set_module_tensor_to_device).parameters.keys()
+                )
                 if accepts_dtype:
-                    set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key), dtype=torch_dtype)
+                    set_module_tensor_to_device(
+                        model,
+                        key,
+                        param_device,
+                        value=f.get_tensor(key),
+                        dtype=torch_dtype,
+                    )
                 else:
-                    set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key))
+                    set_module_tensor_to_device(
+                        model, key, param_device, value=f.get_tensor(key)
+                    )
         print(f"Resumed from {efficient_weights_ckpt}")
-    if "torch_dtype"in kwargs:
+    if "torch_dtype" in kwargs:
         model = model.to(kwargs["torch_dtype"])
     model.register_to_config(_name_or_path=pretrained_model_name_or_path)
     # Set model in evaluation mode to deactivate DropOut modules by default
@@ -1031,15 +1114,14 @@ def load_unet_for_ssf(
     return model
 
 
-
 def load_unet_for_difffit(
-        pretrained_model_name_or_path,
-        efficient_weights_ckpt=None, 
-        hf_hub_kwargs=None, 
-        is_bitfit=False, 
-        subfolder='unet',
-        **kwargs
-    ):
+    pretrained_model_name_or_path,
+    efficient_weights_ckpt=None,
+    hf_hub_kwargs=None,
+    is_bitfit=False,
+    subfolder="unet",
+    **kwargs,
+):
     """
     https://github.com/huggingface/diffusers/blob/v0.14.0/src/diffusers/models/modeling_utils.py#L541
     """
@@ -1048,8 +1130,12 @@ def load_unet_for_difffit(
     torch_dtype = kwargs["torch_dtype"] if "torch_dtype" in kwargs else None
     cache_dir = kwargs["cache_dir"] if "cache_dir" in kwargs else None
     if not is_bitfit:
-        config = UNet2DConditionModel.load_config(pretrained_model_name_or_path, subfolder=subfolder)
-        original_model = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder, cache_dir=cache_dir)
+        config = UNet2DConditionModel.load_config(
+            pretrained_model_name_or_path, subfolder=subfolder
+        )
+        original_model = UNet2DConditionModel.from_pretrained(
+            pretrained_model_name_or_path, subfolder=subfolder, cache_dir=cache_dir
+        )
         state_dict = original_model.state_dict()
         with accelerate.init_empty_weights():
             model = UNet2DConditionModelForDiffFit.from_config(config)
@@ -1060,7 +1146,9 @@ def load_unet_for_difffit(
                     hidden_size = model.config.block_out_channels[-1]
                 elif name.startswith("up_blocks"):
                     block_id = int(name[len("up_blocks.")])
-                    hidden_size = list(reversed(model.config.block_out_channels))[block_id]
+                    hidden_size = list(reversed(model.config.block_out_channels))[
+                        block_id
+                    ]
                 elif name.startswith("down_blocks"):
                     block_id = int(name[len("down_blocks.")])
                     hidden_size = model.config.block_out_channels[block_id]
@@ -1068,8 +1156,10 @@ def load_unet_for_difffit(
                 difffit_attn_procs[name] = DiffFitAttnProcessor(hidden_size=hidden_size)
 
             model.set_attn_processor(difffit_attn_procs)
-            
-        scale_factor_weights = {n: torch.ones(p.shape) for n, p in model.named_parameters() if "gamma_" in n}
+
+        scale_factor_weights = {
+            n: torch.ones(p.shape) for n, p in model.named_parameters() if "gamma_" in n
+        }
         state_dict.update(scale_factor_weights)
         # move the params from meta device to cpu
         missing_keys = set(model.state_dict().keys()) - set(state_dict.keys())
@@ -1081,34 +1171,58 @@ def load_unet_for_difffit(
                 " those weights or else make sure your checkpoint file is correct."
             )
         for param_name, param in state_dict.items():
-            accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+            accepts_dtype = "dtype" in set(
+                inspect.signature(set_module_tensor_to_device).parameters.keys()
+            )
             if accepts_dtype:
-                set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=torch_dtype)
+                set_module_tensor_to_device(
+                    model, param_name, param_device, value=param, dtype=torch_dtype
+                )
             else:
-                set_module_tensor_to_device(model, param_name, param_device, value=param)
+                set_module_tensor_to_device(
+                    model, param_name, param_device, value=param
+                )
     else:
         original_model = None
-        model = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder, cache_dir=cache_dir)
+        model = UNet2DConditionModel.from_pretrained(
+            pretrained_model_name_or_path, subfolder=subfolder, cache_dir=cache_dir
+        )
 
     if efficient_weights_ckpt:
         if os.path.isdir(efficient_weights_ckpt):
-            efficient_weights_ckpt = os.path.join(efficient_weights_ckpt, "efficient_weights.safetensors")
+            efficient_weights_ckpt = os.path.join(
+                efficient_weights_ckpt, "efficient_weights.safetensors"
+            )
         elif not os.path.exists(efficient_weights_ckpt):
             # download from hub
             hf_hub_kwargs = {} if hf_hub_kwargs is None else hf_hub_kwargs
-            efficient_weights_ckpt = huggingface_hub.hf_hub_download(efficient_weights_ckpt, filename="efficient_weights.safetensors", **hf_hub_kwargs)
+            efficient_weights_ckpt = huggingface_hub.hf_hub_download(
+                efficient_weights_ckpt,
+                filename="efficient_weights.safetensors",
+                **hf_hub_kwargs,
+            )
         assert os.path.exists(efficient_weights_ckpt)
 
         with safe_open(efficient_weights_ckpt, framework="pt", device="cpu") as f:
             for key in f.keys():
                 # spectral_shifts_weights[key] = f.get_tensor(key)
-                accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+                accepts_dtype = "dtype" in set(
+                    inspect.signature(set_module_tensor_to_device).parameters.keys()
+                )
                 if accepts_dtype:
-                    set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key), dtype=torch_dtype)
+                    set_module_tensor_to_device(
+                        model,
+                        key,
+                        param_device,
+                        value=f.get_tensor(key),
+                        dtype=torch_dtype,
+                    )
                 else:
-                    set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key))
+                    set_module_tensor_to_device(
+                        model, key, param_device, value=f.get_tensor(key)
+                    )
         print(f"Resumed from {efficient_weights_ckpt}")
-    if "torch_dtype"in kwargs:
+    if "torch_dtype" in kwargs:
         model = model.to(kwargs["torch_dtype"])
     model.register_to_config(_name_or_path=pretrained_model_name_or_path)
     # Set model in evaluation mode to deactivate DropOut modules by default
@@ -1117,28 +1231,28 @@ def load_unet_for_difffit(
     torch.cuda.empty_cache()
     return model
 
+
 # def load_unet_for_ssf(
 #         pretrained_model_name_or_path,
-#         efficient_weights_ckpt=None, 
-#         hf_hub_kwargs=None, 
-#         is_bitfit=False, 
+#         efficient_weights_ckpt=None,
+#         hf_hub_kwargs=None,
+#         is_bitfit=False,
 #         subfolder='unet',
 #         **kwargs
 #     ):
-    
 
-    #TODO: Implement SSF for UNet here
 
+# TODO: Implement SSF for UNet here
 
 
 def load_text_encoder_for_difffit(
-        pretrained_model_name_or_path,
-        efficient_weights_ckpt=None,
-        hf_hub_kwargs=None,
-        is_bitfit=False,
-        subfolder='text_encoder',
-        **kwargs
-    ):
+    pretrained_model_name_or_path,
+    efficient_weights_ckpt=None,
+    hf_hub_kwargs=None,
+    is_bitfit=False,
+    subfolder="text_encoder",
+    **kwargs,
+):
     """
     https://github.com/huggingface/diffusers/blob/v0.14.0/src/diffusers/models/modeling_utils.py#L541
     """
@@ -1147,12 +1261,18 @@ def load_text_encoder_for_difffit(
     param_device = "cpu"
     torch_dtype = kwargs["torch_dtype"] if "torch_dtype" in kwargs else None
     if not is_bitfit:
-        config = CLIPTextConfig.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder)
-        original_model = CLIPTextModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder)
+        config = CLIPTextConfig.from_pretrained(
+            pretrained_model_name_or_path, subfolder=subfolder
+        )
+        original_model = CLIPTextModel.from_pretrained(
+            pretrained_model_name_or_path, subfolder=subfolder
+        )
         state_dict = original_model.state_dict()
         with accelerate.init_empty_weights():
             model = CLIPTextModelForDiffFit(config)
-        scale_factor_weights = {n: torch.ones(p.shape) for n, p in model.named_parameters() if "gamma_" in n}
+        scale_factor_weights = {
+            n: torch.ones(p.shape) for n, p in model.named_parameters() if "gamma_" in n
+        }
         state_dict.update(scale_factor_weights)
         # move the params from meta device to cpu
         missing_keys = set(model.state_dict().keys()) - set(state_dict.keys())
@@ -1165,23 +1285,37 @@ def load_text_encoder_for_difffit(
         #     )
 
         for param_name, param in state_dict.items():
-            accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+            accepts_dtype = "dtype" in set(
+                inspect.signature(set_module_tensor_to_device).parameters.keys()
+            )
             if accepts_dtype:
-                set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=torch_dtype)
+                set_module_tensor_to_device(
+                    model, param_name, param_device, value=param, dtype=torch_dtype
+                )
             else:
-                set_module_tensor_to_device(model, param_name, param_device, value=param)
+                set_module_tensor_to_device(
+                    model, param_name, param_device, value=param
+                )
     else:
         original_model = None
-        model = CLIPTextModel.from_pretrained(pretrained_model_name_or_path, subfolder=subfolder)
+        model = CLIPTextModel.from_pretrained(
+            pretrained_model_name_or_path, subfolder=subfolder
+        )
 
     if efficient_weights_ckpt:
         if os.path.isdir(efficient_weights_ckpt):
-            efficient_weights_ckpt = os.path.join(efficient_weights_ckpt, "efficient_weights_te.safetensors")
+            efficient_weights_ckpt = os.path.join(
+                efficient_weights_ckpt, "efficient_weights_te.safetensors"
+            )
         elif not os.path.exists(efficient_weights_ckpt):
             # download from hub
             hf_hub_kwargs = {} if hf_hub_kwargs is None else hf_hub_kwargs
             try:
-                efficient_weights_ckpt = huggingface_hub.hf_hub_download(efficient_weights_ckpt, filename="efficient_weights_te.safetensors", **hf_hub_kwargs)
+                efficient_weights_ckpt = huggingface_hub.hf_hub_download(
+                    efficient_weights_ckpt,
+                    filename="efficient_weights_te.safetensors",
+                    **hf_hub_kwargs,
+                )
             except huggingface_hub.utils.EntryNotFoundError:
                 efficient_weights_ckpt = None
         # load state dict only if `spectral_shifts_te.safetensors` exists
@@ -1189,14 +1323,24 @@ def load_text_encoder_for_difffit(
             with safe_open(efficient_weights_ckpt, framework="pt", device="cpu") as f:
                 for key in f.keys():
                     # spectral_shifts_weights[key] = f.get_tensor(key)
-                    accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+                    accepts_dtype = "dtype" in set(
+                        inspect.signature(set_module_tensor_to_device).parameters.keys()
+                    )
                     if accepts_dtype:
-                        set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key), dtype=torch_dtype)
+                        set_module_tensor_to_device(
+                            model,
+                            key,
+                            param_device,
+                            value=f.get_tensor(key),
+                            dtype=torch_dtype,
+                        )
                     else:
-                        set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key))
+                        set_module_tensor_to_device(
+                            model, key, param_device, value=f.get_tensor(key)
+                        )
             print(f"Resumed from {efficient_weights_ckpt}")
-        
-    if "torch_dtype"in kwargs:
+
+    if "torch_dtype" in kwargs:
         model = model.to(kwargs["torch_dtype"])
     # model.register_to_config(_name_or_path=pretrained_model_name_or_path)
     # Set model in evaluation mode to deactivate DropOut modules by default
@@ -1205,15 +1349,17 @@ def load_text_encoder_for_difffit(
     torch.cuda.empty_cache()
     return model
 
+
 ############################################ NEW FUNCTIONS FOR THE HPO ############################################
 
 ##### 1. SV-DIFF
 
+
 def return_new_optim_params(unet):
     optim_params_1d = []
     optim_params = []
-    for n,p in unet.named_parameters():
-        if("delta" in n and p.requires_grad == True):
+    for n, p in unet.named_parameters():
+        if "delta" in n and p.requires_grad == True:
             if "norm" in n:
                 optim_params_1d.append(p)
             else:
@@ -1221,52 +1367,63 @@ def return_new_optim_params(unet):
 
     return optim_params, optim_params_1d
 
-    
+
 def enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask):
-    attention_pattern = [0,1]
+    attention_pattern = [0, 1]
 
     mid_block_mask = [binary_mask[6]]
     down_block_mask = binary_mask[0:6]
     up_block_mask = binary_mask[7:]
-    
+
     # Down Blocks
     print("Down Blocks")
     for i in range(len(down_block_mask)):
-        block_idx = i//2
-        attention_idx = attention_pattern[i%2]
+        block_idx = i // 2
+        attention_idx = attention_pattern[i % 2]
         mask_element = down_block_mask[i]
-    
+
         # print("Block: ", block_idx)
         # print("Attention: ", attention_idx)
-    
-        if(mask_element == 0):
-            disable_grad_svdiff(unet_with_svdiff.down_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+
+        if mask_element == 0:
+            disable_grad_svdiff(
+                unet_with_svdiff.down_blocks[block_idx]
+                .attentions[attention_idx]
+                .transformer_blocks
+            )
         else:
-            continue # Elements are trainable by default
-    
+            continue  # Elements are trainable by default
+
     # Mid Block
     print("Mid Blocks")
     for i in range(len(mid_block_mask)):
         mask_element = mid_block_mask[i]
-    
-        if(mask_element == 0):
-            disable_grad_svdiff(unet_with_svdiff.mid_block.attentions[0].transformer_blocks)
-    
+
+        if mask_element == 0:
+            disable_grad_svdiff(
+                unet_with_svdiff.mid_block.attentions[0].transformer_blocks
+            )
+
     # Up Blocks
     print("Up Blocks")
     for i in range(len(up_block_mask)):
-        mask_element = up_block_mask[i] 
-        block_idx = (i//2)+1 # Indexing for up-blocks starts from 1
-        attention_idx = attention_pattern[i%2]
+        mask_element = up_block_mask[i]
+        block_idx = (i // 2) + 1  # Indexing for up-blocks starts from 1
+        attention_idx = attention_pattern[i % 2]
         # print("Block: ", block_idx)
         # print("Attention: ", attention_idx)
-    
-        if(mask_element == 0):
-            disable_grad_svdiff(unet_with_svdiff.up_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+
+        if mask_element == 0:
+            disable_grad_svdiff(
+                unet_with_svdiff.up_blocks[block_idx]
+                .attentions[attention_idx]
+                .transformer_blocks
+            )
 
     optim_params, optim_params_1d = return_new_optim_params(unet_with_svdiff)
 
     return unet_with_svdiff, optim_params, optim_params_1d
+
 
 ##### 2. DiffFit
 def enable_disable_difffit_with_mask(unet, binary_mask, verbose=False):
@@ -1275,106 +1432,117 @@ def enable_disable_difffit_with_mask(unet, binary_mask, verbose=False):
     up_block_mask = binary_mask[7:]
 
     # Sanity Check
-    assert (len(mid_block_mask) + len(down_block_mask) + len(up_block_mask)) == len(binary_mask)
+    assert (len(mid_block_mask) + len(down_block_mask) + len(up_block_mask)) == len(
+        binary_mask
+    )
 
     ################# DOWN BLOCKS #################
-    if(verbose):
+    if verbose:
         print("Masking down blocks")
-    attention_pattern = [0,1]
+    attention_pattern = [0, 1]
     for i in range(len(down_block_mask)):
-        block_idx = i//2
-        attention_idx = attention_pattern[i%2]
+        block_idx = i // 2
+        attention_idx = attention_pattern[i % 2]
         mask_element = down_block_mask[i]
 
-        if(verbose):
+        if verbose:
             print("Block: ", block_idx)
             print("Attention: ", attention_idx)
-    
-        if(mask_element == 0):
-            disable_grad_difffit(unet.down_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+
+        if mask_element == 0:
+            disable_grad_difffit(
+                unet.down_blocks[block_idx].attentions[attention_idx].transformer_blocks
+            )
         else:
-            continue # Elements are trainable by default
+            continue  # Elements are trainable by default
 
     ################# MID BLOCK #################
-    if(verbose):
+    if verbose:
         print("Masking Mid block")
-        
+
     for i in range(len(mid_block_mask)):
         mask_element = mid_block_mask[i]
-    
-        if(mask_element == 0):
+
+        if mask_element == 0:
             disable_grad_difffit(unet.mid_block.attentions[0].transformer_blocks)
 
     ################# UP BLOCKS #################
-    if(verbose):
+    if verbose:
         print("Masking Up blocks")
 
-    attention_pattern = [0,1]
+    attention_pattern = [0, 1]
     for i in range(len(up_block_mask)):
-        mask_element = up_block_mask[i] 
-        block_idx = (i//2)+1 # Indexing for up-blocks starts from 1
-        attention_idx = attention_pattern[i%2]
-        if(verbose):
+        mask_element = up_block_mask[i]
+        block_idx = (i // 2) + 1  # Indexing for up-blocks starts from 1
+        attention_idx = attention_pattern[i % 2]
+        if verbose:
             print("Block: ", block_idx)
             print("Attention: ", attention_idx)
-    
-        if(mask_element == 0):
-            disable_grad_difffit(unet.up_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+
+        if mask_element == 0:
+            disable_grad_difffit(
+                unet.up_blocks[block_idx].attentions[attention_idx].transformer_blocks
+            )
 
     return unet
-    
+
+
 def enable_disable_attention_with_mask(unet, binary_mask, verbose=False):
     mid_block_mask = [binary_mask[6]]
     down_block_mask = binary_mask[0:6]
     up_block_mask = binary_mask[7:]
 
-    
-
     # Sanity Check
-    assert (len(mid_block_mask) + len(down_block_mask) + len(up_block_mask)) == len(binary_mask)
+    assert (len(mid_block_mask) + len(down_block_mask) + len(up_block_mask)) == len(
+        binary_mask
+    )
 
     ################# DOWN BLOCKS #################
-    if(verbose):
+    if verbose:
         print("Masking down blocks")
-    attention_pattern = [0,1]
+    attention_pattern = [0, 1]
     for i in range(len(down_block_mask)):
-        block_idx = i//2
-        attention_idx = attention_pattern[i%2]
+        block_idx = i // 2
+        attention_idx = attention_pattern[i % 2]
         mask_element = down_block_mask[i]
 
-        if(verbose):
+        if verbose:
             print("Block: ", block_idx)
             print("Attention: ", attention_idx)
-    
-        if(mask_element == 0):
-            disable_grad_attention(unet.down_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+
+        if mask_element == 0:
+            disable_grad_attention(
+                unet.down_blocks[block_idx].attentions[attention_idx].transformer_blocks
+            )
         else:
-            continue # Elements are trainable by default
+            continue  # Elements are trainable by default
 
     ################# MID BLOCK #################
-    if(verbose):
+    if verbose:
         print("Masking Mid block")
-        
+
     for i in range(len(mid_block_mask)):
         mask_element = mid_block_mask[i]
-    
-        if(mask_element == 0):
+
+        if mask_element == 0:
             disable_grad_attention(unet.mid_block.attentions[0].transformer_blocks)
 
     ################# UP BLOCKS #################
-    if(verbose):
+    if verbose:
         print("Masking Up blocks")
 
-    attention_pattern = [0,1,2]
+    attention_pattern = [0, 1, 2]
     for i in range(len(up_block_mask)):
-        mask_element = up_block_mask[i] 
-        block_idx = (i//3)+1 # Indexing for up-blocks starts from 1
-        attention_idx = attention_pattern[i%3]
-        if(verbose):
+        mask_element = up_block_mask[i]
+        block_idx = (i // 3) + 1  # Indexing for up-blocks starts from 1
+        attention_idx = attention_pattern[i % 3]
+        if verbose:
             print("Block: ", block_idx)
             print("Attention: ", attention_idx)
-    
-        if(mask_element == 0):
-            disable_grad_attention(unet.up_blocks[block_idx].attentions[attention_idx].transformer_blocks)
+
+        if mask_element == 0:
+            disable_grad_attention(
+                unet.up_blocks[block_idx].attentions[attention_idx].transformer_blocks
+            )
 
     return unet

@@ -15,7 +15,10 @@ from typing import Optional
 
 from torch import nn
 
-from svdiff.diffusers_models.transformer_2d import Transformer2DModel, Transformer2DModelOutput
+from svdiff.diffusers_models.transformer_2d import (
+    Transformer2DModel,
+    Transformer2DModelOutput,
+)
 
 
 class DualTransformer2DModel(nn.Module):
@@ -130,7 +133,9 @@ class DualTransformer2DModel(nn.Module):
         # attention_mask is not used yet
         for i in range(2):
             # for each of the two transformers, pass the corresponding condition tokens
-            condition_state = encoder_hidden_states[:, tokens_start : tokens_start + self.condition_lengths[i]]
+            condition_state = encoder_hidden_states[
+                :, tokens_start : tokens_start + self.condition_lengths[i]
+            ]
             transformer_index = self.transformer_index_for_condition[i]
             encoded_state = self.transformers[transformer_index](
                 input_states,
@@ -142,7 +147,9 @@ class DualTransformer2DModel(nn.Module):
             encoded_states.append(encoded_state - input_states)
             tokens_start += self.condition_lengths[i]
 
-        output_states = encoded_states[0] * self.mix_ratio + encoded_states[1] * (1 - self.mix_ratio)
+        output_states = encoded_states[0] * self.mix_ratio + encoded_states[1] * (
+            1 - self.mix_ratio
+        )
         output_states = output_states + input_states
 
         if not return_dict:

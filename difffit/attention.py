@@ -59,9 +59,13 @@ class AttentionBlock(nn.Module):
         super().__init__()
         self.channels = channels
 
-        self.num_heads = channels // num_head_channels if num_head_channels is not None else 1
+        self.num_heads = (
+            channels // num_head_channels if num_head_channels is not None else 1
+        )
         self.num_head_size = num_head_channels
-        self.group_norm = nn.GroupNorm(num_channels=channels, num_groups=norm_num_groups, eps=eps, affine=True)
+        self.group_norm = nn.GroupNorm(
+            num_channels=channels, num_groups=norm_num_groups, eps=eps, affine=True
+        )
 
         # define q,k,v as linear layers
         self.query = nn.Linear(channels, channels)
@@ -78,18 +82,24 @@ class AttentionBlock(nn.Module):
         batch_size, seq_len, dim = tensor.shape
         head_size = self.num_heads
         tensor = tensor.reshape(batch_size, seq_len, head_size, dim // head_size)
-        tensor = tensor.permute(0, 2, 1, 3).reshape(batch_size * head_size, seq_len, dim // head_size)
+        tensor = tensor.permute(0, 2, 1, 3).reshape(
+            batch_size * head_size, seq_len, dim // head_size
+        )
         return tensor
 
     def reshape_batch_dim_to_heads(self, tensor):
         batch_size, seq_len, dim = tensor.shape
         head_size = self.num_heads
         tensor = tensor.reshape(batch_size // head_size, head_size, seq_len, dim)
-        tensor = tensor.permute(0, 2, 1, 3).reshape(batch_size // head_size, seq_len, dim * head_size)
+        tensor = tensor.permute(0, 2, 1, 3).reshape(
+            batch_size // head_size, seq_len, dim * head_size
+        )
         return tensor
 
     def set_use_memory_efficient_attention_xformers(
-        self, use_memory_efficient_attention_xformers: bool, attention_op: Optional[Callable] = None
+        self,
+        use_memory_efficient_attention_xformers: bool,
+        attention_op: Optional[Callable] = None,
     ):
         if use_memory_efficient_attention_xformers:
             if not is_xformers_available():
@@ -115,7 +125,9 @@ class AttentionBlock(nn.Module):
                     )
                 except Exception as e:
                     raise e
-        self._use_memory_efficient_attention_xformers = use_memory_efficient_attention_xformers
+        self._use_memory_efficient_attention_xformers = (
+            use_memory_efficient_attention_xformers
+        )
         self._attention_op = attention_op
 
     def forward(self, hidden_states):
@@ -125,7 +137,9 @@ class AttentionBlock(nn.Module):
         # norm
         hidden_states = self.group_norm(hidden_states)
 
-        hidden_states = hidden_states.view(batch, channel, height * width).transpose(1, 2)
+        hidden_states = hidden_states.view(batch, channel, height * width).transpose(
+            1, 2
+        )
 
         # proj to q, k, v
         query_proj = self.query(hidden_states)
@@ -158,7 +172,9 @@ class AttentionBlock(nn.Module):
                 beta=0,
                 alpha=scale,
             )
-            attention_probs = torch.softmax(attention_scores.float(), dim=-1).type(attention_scores.dtype)
+            attention_probs = torch.softmax(attention_scores.float(), dim=-1).type(
+                attention_scores.dtype
+            )
             hidden_states = torch.bmm(attention_probs, value_proj)
 
         # reshape hidden_states
@@ -167,7 +183,9 @@ class AttentionBlock(nn.Module):
         # compute next hidden_states
         hidden_states = self.proj_attn(hidden_states)
 
-        hidden_states = hidden_states.transpose(-1, -2).reshape(batch, channel, height, width)
+        hidden_states = hidden_states.transpose(-1, -2).reshape(
+            batch, channel, height, width
+        )
 
         # res connect and rescale
         hidden_states = (hidden_states + residual) / self.rescale_output_factor
@@ -215,8 +233,12 @@ class BasicTransformerBlock(nn.Module):
         super().__init__()
         self.only_cross_attention = only_cross_attention
 
-        self.use_ada_layer_norm_zero = (num_embeds_ada_norm is not None) and norm_type == "ada_norm_zero"
-        self.use_ada_layer_norm = (num_embeds_ada_norm is not None) and norm_type == "ada_norm"
+        self.use_ada_layer_norm_zero = (
+            num_embeds_ada_norm is not None
+        ) and norm_type == "ada_norm_zero"
+        self.use_ada_layer_norm = (
+            num_embeds_ada_norm is not None
+        ) and norm_type == "ada_norm"
 
         if norm_type in ("ada_norm", "ada_norm_zero") and num_embeds_ada_norm is None:
             raise ValueError(
@@ -256,7 +278,9 @@ class BasicTransformerBlock(nn.Module):
             )
             self.attn2 = Attention(
                 query_dim=dim,
-                cross_attention_dim=cross_attention_dim if not double_self_attention else None,
+                cross_attention_dim=(
+                    cross_attention_dim if not double_self_attention else None
+                ),
                 heads=num_attention_heads,
                 dim_head=attention_head_dim,
                 dropout=dropout,
@@ -275,11 +299,15 @@ class BasicTransformerBlock(nn.Module):
 
         # 3. Feed-forward
         self.norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine)
-        self.ff = FeedForward(dim, dropout=dropout, activation_fn=activation_fn, final_dropout=final_dropout)
+        self.ff = FeedForward(
+            dim,
+            dropout=dropout,
+            activation_fn=activation_fn,
+            final_dropout=final_dropout,
+        )
         ##############
         self.gamma_ff = nn.Parameter(torch.ones(dim))
         ##############
-        
 
     def forward(
         self,
@@ -302,10 +330,14 @@ class BasicTransformerBlock(nn.Module):
         else:
             norm_hidden_states = self.norm1(hidden_states)
 
-        cross_attention_kwargs = cross_attention_kwargs if cross_attention_kwargs is not None else {}
+        cross_attention_kwargs = (
+            cross_attention_kwargs if cross_attention_kwargs is not None else {}
+        )
         attn_output = self.attn1(
             norm_hidden_states,
-            encoder_hidden_states=encoder_hidden_states if self.only_cross_attention else None,
+            encoder_hidden_states=(
+                encoder_hidden_states if self.only_cross_attention else None
+            ),
             attention_mask=attention_mask,
             **cross_attention_kwargs,
         )
@@ -316,7 +348,9 @@ class BasicTransformerBlock(nn.Module):
         # 2. Cross-Attention
         if self.attn2 is not None:
             norm_hidden_states = (
-                self.norm2(hidden_states, timestep) if self.use_ada_layer_norm else self.norm2(hidden_states)
+                self.norm2(hidden_states, timestep)
+                if self.use_ada_layer_norm
+                else self.norm2(hidden_states)
             )
             # TODO (Birch-San): Here we should prepare the encoder_attention mask correctly
             # prepare attention mask here
@@ -333,7 +367,9 @@ class BasicTransformerBlock(nn.Module):
         norm_hidden_states = self.norm3(hidden_states)
 
         if self.use_ada_layer_norm_zero:
-            norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+            norm_hidden_states = (
+                norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+            )
 
         ff_output = self.ff(norm_hidden_states)
 
@@ -411,7 +447,9 @@ class GELU(nn.Module):
         if gate.device.type != "mps":
             return F.gelu(gate, approximate=self.approximate)
         # mps: gelu is not implemented for float16
-        return F.gelu(gate.to(dtype=torch.float32), approximate=self.approximate).to(dtype=gate.dtype)
+        return F.gelu(gate.to(dtype=torch.float32), approximate=self.approximate).to(
+            dtype=gate.dtype
+        )
 
     def forward(self, hidden_states):
         hidden_states = self.proj(hidden_states)
@@ -493,8 +531,12 @@ class AdaLayerNormZero(nn.Module):
         self.norm = nn.LayerNorm(embedding_dim, elementwise_affine=False, eps=1e-6)
 
     def forward(self, x, timestep, class_labels, hidden_dtype=None):
-        emb = self.linear(self.silu(self.emb(timestep, class_labels, hidden_dtype=hidden_dtype)))
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = emb.chunk(6, dim=1)
+        emb = self.linear(
+            self.silu(self.emb(timestep, class_labels, hidden_dtype=hidden_dtype))
+        )
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = emb.chunk(
+            6, dim=1
+        )
         x = self.norm(x) * (1 + scale_msa[:, None]) + shift_msa[:, None]
         return x, gate_msa, shift_mlp, scale_mlp, gate_mlp
 
@@ -505,7 +547,12 @@ class AdaGroupNorm(nn.Module):
     """
 
     def __init__(
-        self, embedding_dim: int, out_dim: int, num_groups: int, act_fn: Optional[str] = None, eps: float = 1e-5
+        self,
+        embedding_dim: int,
+        out_dim: int,
+        num_groups: int,
+        act_fn: Optional[str] = None,
+        eps: float = 1e-5,
     ):
         super().__init__()
         self.num_groups = num_groups

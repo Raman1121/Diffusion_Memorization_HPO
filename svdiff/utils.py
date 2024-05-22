@@ -25,41 +25,32 @@ def save_unet_svdiff(accelerator, unet, path_experiments):
     print("Saving SVDIFF UNET weights")
 
     state_dict_keys = [
-        k
-        for k in accelerator.unwrap_model(unet).state_dict().keys()
-        if "delta" in k
+        k for k in accelerator.unwrap_model(unet).state_dict().keys() if "delta" in k
     ]
 
     if accelerator.is_main_process:
-        
-        state_dict = accelerator.unwrap_model(
-            unet, keep_fp32_wrapper=True
-        ).state_dict()
+
+        state_dict = accelerator.unwrap_model(unet, keep_fp32_wrapper=True).state_dict()
 
         state_dict = {k: state_dict[k] for k in state_dict_keys}
 
         save_file(
             state_dict,
-            os.path.join(
-                path_experiments, "spectral_shifts.safetensors"
-            ),
+            os.path.join(path_experiments, "spectral_shifts.safetensors"),
         )
 
         print(
             "[*] UNET Weights saved at: ",
-            os.path.join(
-                path_experiments, "spectral_shifts.safetensors"
-            ),
+            os.path.join(path_experiments, "spectral_shifts.safetensors"),
         )
+
 
 def save_text_encoder_svdiff(accelerator, unet, path_experiments):
     print("Saving SVDIFF Text Encoder weights")
 
     state_dict_keys_te = [
         k
-        for k in accelerator.unwrap_model(text_encoder)
-        .state_dict()
-        .keys()
+        for k in accelerator.unwrap_model(text_encoder).state_dict().keys()
         if "delta" in k
     ]
     if accelerator.is_main_process:
@@ -69,32 +60,38 @@ def save_text_encoder_svdiff(accelerator, unet, path_experiments):
         state_dict = {k: state_dict[k] for k in state_dict_keys_te}
         save_file(
             state_dict,
-            os.path.join(
-                path_experiments, "spectral_shifts_te.safetensors"
-            ),
+            os.path.join(path_experiments, "spectral_shifts_te.safetensors"),
         )
 
         print(
             "[*] Text Encoder Weights saved at: ",
-            os.path.join(
-                path_experiments, "spectral_shifts_te.safetensors"
-            ),
+            os.path.join(path_experiments, "spectral_shifts_te.safetensors"),
         )
 
-def load_unet_for_svdiff(pretrained_model_name_or_path, spectral_shifts_ckpt=None, hf_hub_kwargs=None, **kwargs):
+
+def load_unet_for_svdiff(
+    pretrained_model_name_or_path,
+    spectral_shifts_ckpt=None,
+    hf_hub_kwargs=None,
+    **kwargs,
+):
     """
     https://github.com/huggingface/diffusers/blob/v0.14.0/src/diffusers/models/modeling_utils.py#L541
-    """ 
+    """
     print(pretrained_model_name_or_path)
     config = UNet2DConditionModel.load_config(pretrained_model_name_or_path, **kwargs)
-    original_model = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, **kwargs)
+    original_model = UNet2DConditionModel.from_pretrained(
+        pretrained_model_name_or_path, **kwargs
+    )
     state_dict = original_model.state_dict()
     with accelerate.init_empty_weights():
         model = UNet2DConditionModelForSVDiff.from_config(config)
     # load pre-trained weights
     param_device = "cpu"
     torch_dtype = kwargs["torch_dtype"] if "torch_dtype" in kwargs else None
-    spectral_shifts_weights = {n: torch.zeros(p.shape) for n, p in model.named_parameters() if "delta" in n}
+    spectral_shifts_weights = {
+        n: torch.zeros(p.shape) for n, p in model.named_parameters() if "delta" in n
+    }
     state_dict.update(spectral_shifts_weights)
     # move the params from meta device to cpu
     missing_keys = set(model.state_dict().keys()) - set(state_dict.keys())
@@ -107,31 +104,51 @@ def load_unet_for_svdiff(pretrained_model_name_or_path, spectral_shifts_ckpt=Non
         )
 
     for param_name, param in state_dict.items():
-        accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+        accepts_dtype = "dtype" in set(
+            inspect.signature(set_module_tensor_to_device).parameters.keys()
+        )
         if accepts_dtype:
-            set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=torch_dtype)
+            set_module_tensor_to_device(
+                model, param_name, param_device, value=param, dtype=torch_dtype
+            )
         else:
             set_module_tensor_to_device(model, param_name, param_device, value=param)
-    
+
     if spectral_shifts_ckpt:
         if os.path.isdir(spectral_shifts_ckpt):
-            spectral_shifts_ckpt = os.path.join(spectral_shifts_ckpt, "spectral_shifts.safetensors")
+            spectral_shifts_ckpt = os.path.join(
+                spectral_shifts_ckpt, "spectral_shifts.safetensors"
+            )
         elif not os.path.exists(spectral_shifts_ckpt):
             # download from hub
             hf_hub_kwargs = {} if hf_hub_kwargs is None else hf_hub_kwargs
-            spectral_shifts_ckpt = huggingface_hub.hf_hub_download(spectral_shifts_ckpt, filename="spectral_shifts.safetensors", **hf_hub_kwargs)
+            spectral_shifts_ckpt = huggingface_hub.hf_hub_download(
+                spectral_shifts_ckpt,
+                filename="spectral_shifts.safetensors",
+                **hf_hub_kwargs,
+            )
         assert os.path.exists(spectral_shifts_ckpt)
 
         with safe_open(spectral_shifts_ckpt, framework="pt", device="cpu") as f:
             for key in f.keys():
                 # spectral_shifts_weights[key] = f.get_tensor(key)
-                accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+                accepts_dtype = "dtype" in set(
+                    inspect.signature(set_module_tensor_to_device).parameters.keys()
+                )
                 if accepts_dtype:
-                    set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key), dtype=torch_dtype)
+                    set_module_tensor_to_device(
+                        model,
+                        key,
+                        param_device,
+                        value=f.get_tensor(key),
+                        dtype=torch_dtype,
+                    )
                 else:
-                    set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key))
+                    set_module_tensor_to_device(
+                        model, key, param_device, value=f.get_tensor(key)
+                    )
         print(f"Resumed from {spectral_shifts_ckpt}")
-    if "torch_dtype"in kwargs:
+    if "torch_dtype" in kwargs:
         model = model.to(kwargs["torch_dtype"])
     model.register_to_config(_name_or_path=pretrained_model_name_or_path)
     # Set model in evaluation mode to deactivate DropOut modules by default
@@ -141,25 +158,28 @@ def load_unet_for_svdiff(pretrained_model_name_or_path, spectral_shifts_ckpt=Non
     return model
 
 
-
 def load_text_encoder_for_svdiff(
-        pretrained_model_name_or_path,
-        spectral_shifts_ckpt=None,
-        hf_hub_kwargs=None,
-        **kwargs
-    ):
+    pretrained_model_name_or_path,
+    spectral_shifts_ckpt=None,
+    hf_hub_kwargs=None,
+    **kwargs,
+):
     """
     https://github.com/huggingface/diffusers/blob/v0.14.0/src/diffusers/models/modeling_utils.py#L541
     """
     config = CLIPTextConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-    original_model = CLIPTextModel.from_pretrained(pretrained_model_name_or_path, **kwargs)
+    original_model = CLIPTextModel.from_pretrained(
+        pretrained_model_name_or_path, **kwargs
+    )
     state_dict = original_model.state_dict()
     with accelerate.init_empty_weights():
         model = CLIPTextModelForSVDiff(config)
     # load pre-trained weights
     param_device = "cpu"
     torch_dtype = kwargs["torch_dtype"] if "torch_dtype" in kwargs else None
-    spectral_shifts_weights = {n: torch.zeros(p.shape) for n, p in model.named_parameters() if "delta" in n}
+    spectral_shifts_weights = {
+        n: torch.zeros(p.shape) for n, p in model.named_parameters() if "delta" in n
+    }
     state_dict.update(spectral_shifts_weights)
     # move the params from meta device to cpu
     missing_keys = set(model.state_dict().keys()) - set(state_dict.keys())
@@ -172,20 +192,30 @@ def load_text_encoder_for_svdiff(
     #     )
 
     for param_name, param in state_dict.items():
-        accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+        accepts_dtype = "dtype" in set(
+            inspect.signature(set_module_tensor_to_device).parameters.keys()
+        )
         if accepts_dtype:
-            set_module_tensor_to_device(model, param_name, param_device, value=param, dtype=torch_dtype)
+            set_module_tensor_to_device(
+                model, param_name, param_device, value=param, dtype=torch_dtype
+            )
         else:
             set_module_tensor_to_device(model, param_name, param_device, value=param)
-    
+
     if spectral_shifts_ckpt:
         if os.path.isdir(spectral_shifts_ckpt):
-            spectral_shifts_ckpt = os.path.join(spectral_shifts_ckpt, "spectral_shifts_te.safetensors")
+            spectral_shifts_ckpt = os.path.join(
+                spectral_shifts_ckpt, "spectral_shifts_te.safetensors"
+            )
         elif not os.path.exists(spectral_shifts_ckpt):
             # download from hub
             hf_hub_kwargs = {} if hf_hub_kwargs is None else hf_hub_kwargs
             try:
-                spectral_shifts_ckpt = huggingface_hub.hf_hub_download(spectral_shifts_ckpt, filename="spectral_shifts_te.safetensors", **hf_hub_kwargs)
+                spectral_shifts_ckpt = huggingface_hub.hf_hub_download(
+                    spectral_shifts_ckpt,
+                    filename="spectral_shifts_te.safetensors",
+                    **hf_hub_kwargs,
+                )
             except huggingface_hub.utils.EntryNotFoundError:
                 spectral_shifts_ckpt = None
         # load state dict only if `spectral_shifts_te.safetensors` exists
@@ -193,14 +223,24 @@ def load_text_encoder_for_svdiff(
             with safe_open(spectral_shifts_ckpt, framework="pt", device="cpu") as f:
                 for key in f.keys():
                     # spectral_shifts_weights[key] = f.get_tensor(key)
-                    accepts_dtype = "dtype" in set(inspect.signature(set_module_tensor_to_device).parameters.keys())
+                    accepts_dtype = "dtype" in set(
+                        inspect.signature(set_module_tensor_to_device).parameters.keys()
+                    )
                     if accepts_dtype:
-                        set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key), dtype=torch_dtype)
+                        set_module_tensor_to_device(
+                            model,
+                            key,
+                            param_device,
+                            value=f.get_tensor(key),
+                            dtype=torch_dtype,
+                        )
                     else:
-                        set_module_tensor_to_device(model, key, param_device, value=f.get_tensor(key))
+                        set_module_tensor_to_device(
+                            model, key, param_device, value=f.get_tensor(key)
+                        )
             print(f"Resumed from {spectral_shifts_ckpt}")
-        
-    if "torch_dtype"in kwargs:
+
+    if "torch_dtype" in kwargs:
         model = model.to(kwargs["torch_dtype"])
     # model.register_to_config(_name_or_path=pretrained_model_name_or_path)
     # Set model in evaluation mode to deactivate DropOut modules by default
@@ -210,24 +250,24 @@ def load_text_encoder_for_svdiff(
     return model
 
 
-
 def image_grid(imgs, rows, cols):
     assert len(imgs) == rows * cols
     w, h = imgs[0].size
-    grid = Image.new('RGB', size=(cols * w, rows * h))
+    grid = Image.new("RGB", size=(cols * w, rows * h))
     for i, img in enumerate(imgs):
         grid.paste(img, box=(i % cols * w, i // cols * h))
     return grid
 
 
 def slerp(val, low, high):
-    """ taken from https://discuss.pytorch.org/t/help-regarding-slerp-function-for-generative-model-sampling/32475/4
-    """
-    low_norm = low/torch.norm(low, dim=1, keepdim=True)
-    high_norm = high/torch.norm(high, dim=1, keepdim=True)
-    omega = torch.acos((low_norm*high_norm).sum(1))
+    """taken from https://discuss.pytorch.org/t/help-regarding-slerp-function-for-generative-model-sampling/32475/4"""
+    low_norm = low / torch.norm(low, dim=1, keepdim=True)
+    high_norm = high / torch.norm(high, dim=1, keepdim=True)
+    omega = torch.acos((low_norm * high_norm).sum(1))
     so = torch.sin(omega)
-    res = (torch.sin((1.0-val)*omega)/so).unsqueeze(1)*low + (torch.sin(val*omega)/so).unsqueeze(1) * high
+    res = (torch.sin((1.0 - val) * omega) / so).unsqueeze(1) * low + (
+        torch.sin(val * omega) / so
+    ).unsqueeze(1) * high
     return res
 
 
@@ -245,4 +285,3 @@ SCHEDULER_MAPPING = {
     "euler_ancestral": EulerAncestralDiscreteScheduler,
     "dpm_solver++": DPMSolverMultistepScheduler,
 }
-

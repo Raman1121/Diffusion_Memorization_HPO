@@ -1,5 +1,6 @@
 import torch
 
+
 def similarity(img1, img2, threshold=20.0):
     # img1 and img2 are tensors of shape (3, N, N)
     # divide each into 16 non-overlapping N // 4 x N // 4 tiles
@@ -24,6 +25,7 @@ def similarity(img1, img2, threshold=20.0):
     else:
         return False
 
+
 def construct_graph(images, threshold=20.0):
     graph = {}
     for i in range(len(images)):
@@ -36,26 +38,28 @@ def construct_graph(images, threshold=20.0):
                     graph[i].append(j)
     return graph
 
+
 def find_cliques(graph):
     cliques = []
     visited = set()
- 
+
     def dfs(node, clique):
         visited.add(node)
         clique.add(node)
- 
+
         for neighbor in graph[node]:
             if neighbor not in visited:
                 dfs(neighbor, clique)
- 
+
     for node in graph:
         if node not in visited:
             clique = set()
             dfs(node, clique)
             if len(clique) > 1:
                 cliques.append(clique)
- 
+
     return cliques
+
 
 def attack(images, min_clique_size=3, threshold=20.0):
     graph = construct_graph(images, threshold=threshold)

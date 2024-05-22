@@ -20,7 +20,14 @@ class Upsample1D(nn.Module):
             out_channels:
     """
 
-    def __init__(self, channels, use_conv=False, use_conv_transpose=False, out_channels=None, name="conv"):
+    def __init__(
+        self,
+        channels,
+        use_conv=False,
+        use_conv_transpose=False,
+        out_channels=None,
+        name="conv",
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -58,7 +65,9 @@ class Downsample1D(nn.Module):
         padding:
     """
 
-    def __init__(self, channels, use_conv=False, out_channels=None, padding=1, name="conv"):
+    def __init__(
+        self, channels, use_conv=False, out_channels=None, padding=1, name="conv"
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -68,7 +77,9 @@ class Downsample1D(nn.Module):
         self.name = name
 
         if use_conv:
-            self.conv = SVDConv1d(self.channels, self.out_channels, 3, stride=stride, padding=padding)
+            self.conv = SVDConv1d(
+                self.channels, self.out_channels, 3, stride=stride, padding=padding
+            )
         else:
             assert self.channels == self.out_channels
             self.conv = nn.AvgPool1d(kernel_size=stride, stride=stride)
@@ -89,7 +100,14 @@ class Upsample2D(nn.Module):
         out_channels:
     """
 
-    def __init__(self, channels, use_conv=False, use_conv_transpose=False, out_channels=None, name="conv"):
+    def __init__(
+        self,
+        channels,
+        use_conv=False,
+        use_conv_transpose=False,
+        out_channels=None,
+        name="conv",
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -129,9 +147,13 @@ class Upsample2D(nn.Module):
         # if `output_size` is passed we force the interpolation output
         # size and do not make use of `scale_factor=2`
         if output_size is None:
-            hidden_states = F.interpolate(hidden_states, scale_factor=2.0, mode="nearest")
+            hidden_states = F.interpolate(
+                hidden_states, scale_factor=2.0, mode="nearest"
+            )
         else:
-            hidden_states = F.interpolate(hidden_states, size=output_size, mode="nearest")
+            hidden_states = F.interpolate(
+                hidden_states, size=output_size, mode="nearest"
+            )
 
         # If the input is bfloat16, we cast back to bfloat16
         if dtype == torch.bfloat16:
@@ -158,7 +180,9 @@ class Downsample2D(nn.Module):
         padding:
     """
 
-    def __init__(self, channels, use_conv=False, out_channels=None, padding=1, name="conv"):
+    def __init__(
+        self, channels, use_conv=False, out_channels=None, padding=1, name="conv"
+    ):
         super().__init__()
         self.channels = channels
         self.out_channels = out_channels or channels
@@ -168,7 +192,9 @@ class Downsample2D(nn.Module):
         self.name = name
 
         if use_conv:
-            conv = SVDConv2d(self.channels, self.out_channels, 3, stride=stride, padding=padding)
+            conv = SVDConv2d(
+                self.channels, self.out_channels, 3, stride=stride, padding=padding
+            )
         else:
             assert self.channels == self.out_channels
             conv = nn.AvgPool2d(kernel_size=stride, stride=stride)
@@ -195,11 +221,15 @@ class Downsample2D(nn.Module):
 
 
 class FirUpsample2D(nn.Module):
-    def __init__(self, channels=None, out_channels=None, use_conv=False, fir_kernel=(1, 3, 3, 1)):
+    def __init__(
+        self, channels=None, out_channels=None, use_conv=False, fir_kernel=(1, 3, 3, 1)
+    ):
         super().__init__()
         out_channels = out_channels if out_channels else channels
         if use_conv:
-            self.Conv2d_0 = SVDConv2d(channels, out_channels, kernel_size=3, stride=1, padding=1)
+            self.Conv2d_0 = SVDConv2d(
+                channels, out_channels, kernel_size=3, stride=1, padding=1
+            )
         self.use_conv = use_conv
         self.fir_kernel = fir_kernel
         self.out_channels = out_channels
@@ -265,7 +295,11 @@ class FirUpsample2D(nn.Module):
             weight = torch.reshape(weight, (num_groups * inC, -1, convH, convW))
 
             inverse_conv = F.conv_transpose2d(
-                hidden_states, weight, stride=stride, output_padding=output_padding, padding=0
+                hidden_states,
+                weight,
+                stride=stride,
+                output_padding=output_padding,
+                padding=0,
             )
 
             output = upfirdn2d_native(
@@ -286,7 +320,9 @@ class FirUpsample2D(nn.Module):
 
     def forward(self, hidden_states):
         if self.use_conv:
-            height = self._upsample_2d(hidden_states, self.Conv2d_0.weight, kernel=self.fir_kernel)
+            height = self._upsample_2d(
+                hidden_states, self.Conv2d_0.weight, kernel=self.fir_kernel
+            )
             height = height + self.Conv2d_0.bias.reshape(1, -1, 1, 1)
         else:
             height = self._upsample_2d(hidden_states, kernel=self.fir_kernel, factor=2)
@@ -295,11 +331,15 @@ class FirUpsample2D(nn.Module):
 
 
 class FirDownsample2D(nn.Module):
-    def __init__(self, channels=None, out_channels=None, use_conv=False, fir_kernel=(1, 3, 3, 1)):
+    def __init__(
+        self, channels=None, out_channels=None, use_conv=False, fir_kernel=(1, 3, 3, 1)
+    ):
         super().__init__()
         out_channels = out_channels if out_channels else channels
         if use_conv:
-            self.Conv2d_0 = SVDConv2d(channels, out_channels, kernel_size=3, stride=1, padding=1)
+            self.Conv2d_0 = SVDConv2d(
+                channels, out_channels, kernel_size=3, stride=1, padding=1
+            )
         self.fir_kernel = fir_kernel
         self.use_conv = use_conv
         self.out_channels = out_channels
@@ -360,10 +400,14 @@ class FirDownsample2D(nn.Module):
 
     def forward(self, hidden_states):
         if self.use_conv:
-            downsample_input = self._downsample_2d(hidden_states, weight=self.Conv2d_0.weight, kernel=self.fir_kernel)
+            downsample_input = self._downsample_2d(
+                hidden_states, weight=self.Conv2d_0.weight, kernel=self.fir_kernel
+            )
             hidden_states = downsample_input + self.Conv2d_0.bias.reshape(1, -1, 1, 1)
         else:
-            hidden_states = self._downsample_2d(hidden_states, kernel=self.fir_kernel, factor=2)
+            hidden_states = self._downsample_2d(
+                hidden_states, kernel=self.fir_kernel, factor=2
+            )
 
         return hidden_states
 
@@ -379,7 +423,9 @@ class KDownsample2D(nn.Module):
 
     def forward(self, x):
         x = F.pad(x, (self.pad,) * 4, self.pad_mode)
-        weight = x.new_zeros([x.shape[1], x.shape[1], self.kernel.shape[0], self.kernel.shape[1]])
+        weight = x.new_zeros(
+            [x.shape[1], x.shape[1], self.kernel.shape[0], self.kernel.shape[1]]
+        )
         indices = torch.arange(x.shape[1], device=x.device)
         weight[indices, indices] = self.kernel.to(weight)
         return F.conv2d(x, weight, stride=2)
@@ -395,7 +441,9 @@ class KUpsample2D(nn.Module):
 
     def forward(self, x):
         x = F.pad(x, ((self.pad + 1) // 2,) * 4, self.pad_mode)
-        weight = x.new_zeros([x.shape[1], x.shape[1], self.kernel.shape[0], self.kernel.shape[1]])
+        weight = x.new_zeros(
+            [x.shape[1], x.shape[1], self.kernel.shape[0], self.kernel.shape[1]]
+        )
         indices = torch.arange(x.shape[1], device=x.device)
         weight[indices, indices] = self.kernel.to(weight)
         return F.conv_transpose2d(x, weight, stride=2, padding=self.pad * 2 + 1)
@@ -472,9 +520,13 @@ class ResnetBlock2D(nn.Module):
         if self.time_embedding_norm == "ada_group":
             self.norm1 = AdaGroupNorm(temb_channels, in_channels, groups, eps=eps)
         else:
-            self.norm1 = SVDGroupNorm(num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
+            self.norm1 = SVDGroupNorm(
+                num_groups=groups, num_channels=in_channels, eps=eps, affine=True
+            )
 
-        self.conv1 = SVDConv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv1 = SVDConv2d(
+            in_channels, out_channels, kernel_size=3, stride=1, padding=1
+        )
 
         if temb_channels is not None:
             if self.time_embedding_norm == "default":
@@ -484,18 +536,24 @@ class ResnetBlock2D(nn.Module):
             elif self.time_embedding_norm == "ada_group":
                 self.time_emb_proj = None
             else:
-                raise ValueError(f"unknown time_embedding_norm : {self.time_embedding_norm} ")
+                raise ValueError(
+                    f"unknown time_embedding_norm : {self.time_embedding_norm} "
+                )
         else:
             self.time_emb_proj = None
 
         if self.time_embedding_norm == "ada_group":
             self.norm2 = AdaGroupNorm(temb_channels, out_channels, groups_out, eps=eps)
         else:
-            self.norm2 = SVDGroupNorm(num_groups=groups_out, num_channels=out_channels, eps=eps, affine=True)
+            self.norm2 = SVDGroupNorm(
+                num_groups=groups_out, num_channels=out_channels, eps=eps, affine=True
+            )
 
         self.dropout = torch.nn.Dropout(dropout)
         conv_2d_out_channels = conv_2d_out_channels or out_channels
-        self.conv2 = SVDConv2d(out_channels, conv_2d_out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = SVDConv2d(
+            out_channels, conv_2d_out_channels, kernel_size=3, stride=1, padding=1
+        )
 
         if non_linearity == "swish":
             self.nonlinearity = lambda x: F.silu(x)
@@ -522,14 +580,25 @@ class ResnetBlock2D(nn.Module):
             elif kernel == "sde_vp":
                 self.downsample = partial(F.avg_pool2d, kernel_size=2, stride=2)
             else:
-                self.downsample = Downsample2D(in_channels, use_conv=False, padding=1, name="op")
+                self.downsample = Downsample2D(
+                    in_channels, use_conv=False, padding=1, name="op"
+                )
 
-        self.use_in_shortcut = self.in_channels != conv_2d_out_channels if use_in_shortcut is None else use_in_shortcut
+        self.use_in_shortcut = (
+            self.in_channels != conv_2d_out_channels
+            if use_in_shortcut is None
+            else use_in_shortcut
+        )
 
         self.conv_shortcut = None
         if self.use_in_shortcut:
             self.conv_shortcut = SVDConv2d(
-                in_channels, conv_2d_out_channels, kernel_size=1, stride=1, padding=0, bias=conv_shortcut_bias
+                in_channels,
+                conv_2d_out_channels,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=conv_shortcut_bias,
             )
 
     def forward(self, input_tensor, temb):
@@ -608,7 +677,9 @@ class Conv1dBlock(nn.Module):
     def __init__(self, inp_channels, out_channels, kernel_size, n_groups=8):
         super().__init__()
 
-        self.conv1d = SVDConv1d(inp_channels, out_channels, kernel_size, padding=kernel_size // 2)
+        self.conv1d = SVDConv1d(
+            inp_channels, out_channels, kernel_size, padding=kernel_size // 2
+        )
         self.group_norm = SVDGroupNorm(n_groups, out_channels)
         self.mish = nn.Mish()
 
@@ -632,7 +703,9 @@ class ResidualTemporalBlock1D(nn.Module):
         self.time_emb = SVDLinear(embed_dim, out_channels)
 
         self.residual_conv = (
-            SVDConv1d(inp_channels, out_channels, 1) if inp_channels != out_channels else nn.Identity()
+            SVDConv1d(inp_channels, out_channels, 1)
+            if inp_channels != out_channels
+            else nn.Identity()
         )
 
     def forward(self, x, t):
@@ -718,7 +791,10 @@ def downsample_2d(hidden_states, kernel=None, factor=2, gain=1):
     kernel = kernel * gain
     pad_value = kernel.shape[0] - factor
     output = upfirdn2d_native(
-        hidden_states, kernel.to(device=hidden_states.device), down=factor, pad=((pad_value + 1) // 2, pad_value // 2)
+        hidden_states,
+        kernel.to(device=hidden_states.device),
+        down=factor,
+        pad=((pad_value + 1) // 2, pad_value // 2),
     )
     return output
 
@@ -739,7 +815,9 @@ def upfirdn2d_native(tensor, kernel, up=1, down=1, pad=(0, 0)):
     out = F.pad(out, [0, 0, 0, up_x - 1, 0, 0, 0, up_y - 1])
     out = out.view(-1, in_h * up_y, in_w * up_x, minor)
 
-    out = F.pad(out, [0, 0, max(pad_x0, 0), max(pad_x1, 0), max(pad_y0, 0), max(pad_y1, 0)])
+    out = F.pad(
+        out, [0, 0, max(pad_x0, 0), max(pad_x1, 0), max(pad_y0, 0), max(pad_y1, 0)]
+    )
     out = out.to(tensor.device)  # Move back to mps if necessary
     out = out[
         :,
@@ -749,7 +827,9 @@ def upfirdn2d_native(tensor, kernel, up=1, down=1, pad=(0, 0)):
     ]
 
     out = out.permute(0, 3, 1, 2)
-    out = out.reshape([-1, 1, in_h * up_y + pad_y0 + pad_y1, in_w * up_x + pad_x0 + pad_x1])
+    out = out.reshape(
+        [-1, 1, in_h * up_y + pad_y0 + pad_y1, in_w * up_x + pad_x0 + pad_x1]
+    )
     w = torch.flip(kernel, [0, 1]).view(1, 1, kernel_h, kernel_w)
     out = F.conv2d(out, w)
     out = out.reshape(

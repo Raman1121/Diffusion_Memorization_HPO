@@ -76,7 +76,9 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False, extra_tokens=
     grid = grid.reshape([2, 1, grid_size, grid_size])
     pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
     if cls_token and extra_tokens > 0:
-        pos_embed = np.concatenate([np.zeros([extra_tokens, embed_dim]), pos_embed], axis=0)
+        pos_embed = np.concatenate(
+            [np.zeros([extra_tokens, embed_dim]), pos_embed], axis=0
+        )
     return pos_embed
 
 
@@ -134,7 +136,11 @@ class PatchEmbed(nn.Module):
         self.layer_norm = layer_norm
 
         self.proj = nn.Conv2d(
-            in_channels, embed_dim, kernel_size=(patch_size, patch_size), stride=patch_size, bias=bias
+            in_channels,
+            embed_dim,
+            kernel_size=(patch_size, patch_size),
+            stride=patch_size,
+            bias=bias,
         )
         if layer_norm:
             self.norm = SVDLayerNorm(embed_dim, elementwise_affine=False, eps=1e-6)
@@ -142,7 +148,11 @@ class PatchEmbed(nn.Module):
             self.norm = None
 
         pos_embed = get_2d_sincos_pos_embed(embed_dim, int(num_patches**0.5))
-        self.register_buffer("pos_embed", torch.from_numpy(pos_embed).float().unsqueeze(0), persistent=False)
+        self.register_buffer(
+            "pos_embed",
+            torch.from_numpy(pos_embed).float().unsqueeze(0),
+            persistent=False,
+        )
 
     def forward(self, latent):
         latent = self.proj(latent)
@@ -179,7 +189,9 @@ class TimestepEmbedding(nn.Module):
         elif act_fn == "gelu":
             self.act = nn.GELU()
         else:
-            raise ValueError(f"{act_fn} does not exist. Make sure to define one of 'silu', 'mish', or 'gelu'")
+            raise ValueError(
+                f"{act_fn} does not exist. Make sure to define one of 'silu', 'mish', or 'gelu'"
+            )
 
         if out_dim is not None:
             time_embed_dim_out = out_dim
@@ -196,7 +208,9 @@ class TimestepEmbedding(nn.Module):
         elif post_act_fn == "gelu":
             self.post_act = nn.GELU()
         else:
-            raise ValueError(f"{post_act_fn} does not exist. Make sure to define one of 'silu', 'mish', or 'gelu'")
+            raise ValueError(
+                f"{post_act_fn} does not exist. Make sure to define one of 'silu', 'mish', or 'gelu'"
+            )
 
     def forward(self, sample, condition=None):
         if condition is not None:
@@ -214,7 +228,9 @@ class TimestepEmbedding(nn.Module):
 
 
 class Timesteps(nn.Module):
-    def __init__(self, num_channels: int, flip_sin_to_cos: bool, downscale_freq_shift: float):
+    def __init__(
+        self, num_channels: int, flip_sin_to_cos: bool, downscale_freq_shift: float
+    ):
         super().__init__()
         self.num_channels = num_channels
         self.flip_sin_to_cos = flip_sin_to_cos
@@ -234,16 +250,25 @@ class GaussianFourierProjection(nn.Module):
     """Gaussian Fourier embeddings for noise levels."""
 
     def __init__(
-        self, embedding_size: int = 256, scale: float = 1.0, set_W_to_weight=True, log=True, flip_sin_to_cos=False
+        self,
+        embedding_size: int = 256,
+        scale: float = 1.0,
+        set_W_to_weight=True,
+        log=True,
+        flip_sin_to_cos=False,
     ):
         super().__init__()
-        self.weight = nn.Parameter(torch.randn(embedding_size) * scale, requires_grad=False)
+        self.weight = nn.Parameter(
+            torch.randn(embedding_size) * scale, requires_grad=False
+        )
         self.log = log
         self.flip_sin_to_cos = flip_sin_to_cos
 
         if set_W_to_weight:
             # to delete later
-            self.W = nn.Parameter(torch.randn(embedding_size) * scale, requires_grad=False)
+            self.W = nn.Parameter(
+                torch.randn(embedding_size) * scale, requires_grad=False
+            )
 
             self.weight = self.W
 
@@ -305,12 +330,16 @@ class ImagePositionalEmbeddings(nn.Module):
     def forward(self, index):
         emb = self.emb(index)
 
-        height_emb = self.height_emb(torch.arange(self.height, device=index.device).view(1, self.height))
+        height_emb = self.height_emb(
+            torch.arange(self.height, device=index.device).view(1, self.height)
+        )
 
         # 1 x H x D -> 1 x H x 1 x D
         height_emb = height_emb.unsqueeze(2)
 
-        width_emb = self.width_emb(torch.arange(self.width, device=index.device).view(1, self.width))
+        width_emb = self.width_emb(
+            torch.arange(self.width, device=index.device).view(1, self.width)
+        )
 
         # 1 x W x D -> 1 x 1 x W x D
         width_emb = width_emb.unsqueeze(1)
@@ -338,7 +367,9 @@ class LabelEmbedding(nn.Module):
     def __init__(self, num_classes, hidden_size, dropout_prob):
         super().__init__()
         use_cfg_embedding = dropout_prob > 0
-        self.embedding_table = nn.Embedding(num_classes + use_cfg_embedding, hidden_size)
+        self.embedding_table = nn.Embedding(
+            num_classes + use_cfg_embedding, hidden_size
+        )
         self.num_classes = num_classes
         self.dropout_prob = dropout_prob
 
@@ -347,7 +378,9 @@ class LabelEmbedding(nn.Module):
         Drops labels to enable classifier-free guidance.
         """
         if force_drop_ids is None:
-            drop_ids = torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob
+            drop_ids = (
+                torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob
+            )
         else:
             drop_ids = torch.tensor(force_drop_ids == 1)
         labels = torch.where(drop_ids, self.num_classes, labels)
@@ -365,13 +398,21 @@ class CombinedTimestepLabelEmbeddings(nn.Module):
     def __init__(self, num_classes, embedding_dim, class_dropout_prob=0.1):
         super().__init__()
 
-        self.time_proj = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=1)
-        self.timestep_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=embedding_dim)
-        self.class_embedder = LabelEmbedding(num_classes, embedding_dim, class_dropout_prob)
+        self.time_proj = Timesteps(
+            num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=1
+        )
+        self.timestep_embedder = TimestepEmbedding(
+            in_channels=256, time_embed_dim=embedding_dim
+        )
+        self.class_embedder = LabelEmbedding(
+            num_classes, embedding_dim, class_dropout_prob
+        )
 
     def forward(self, timestep, class_labels, hidden_dtype=None):
         timesteps_proj = self.time_proj(timestep)
-        timesteps_emb = self.timestep_embedder(timesteps_proj.to(dtype=hidden_dtype))  # (N, D)
+        timesteps_emb = self.timestep_embedder(
+            timesteps_proj.to(dtype=hidden_dtype)
+        )  # (N, D)
 
         class_labels = self.class_embedder(class_labels)  # (N, D)
 

@@ -6,7 +6,9 @@ import pandas as pd
 from pathlib import Path
 from PIL import ImageFile
 import numpy as np
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 
 class MimicCXRDataset(torch.utils.data.Dataset):
     """Mimic CXR dataset."""
@@ -22,7 +24,7 @@ class MimicCXRDataset(torch.utils.data.Dataset):
         dataset_size_ratio=None,
         use_real_images: bool = True,
         use_findings: bool = False,
-        use_random_word_addition = False
+        use_random_word_addition=False,
     ):
         """
         Args:
@@ -40,7 +42,7 @@ class MimicCXRDataset(torch.utils.data.Dataset):
 
         random.seed(seed)
 
-        if(isinstance(csv_file, pd.DataFrame)):
+        if isinstance(csv_file, pd.DataFrame):
             # We can either pass the dataframe directly
             self.annotations_text_image_path = csv_file
         else:
@@ -70,7 +72,7 @@ class MimicCXRDataset(torch.utils.data.Dataset):
                 subset_rows
             ]
 
-        if(self.use_findings):
+        if self.use_findings:
             assert all(
                 [
                     isinstance(text, str)
@@ -86,13 +88,17 @@ class MimicCXRDataset(torch.utils.data.Dataset):
             ), "All text must be strings"
 
         if self.tokenizer is not None:
-            if(self.use_findings):
+            if self.use_findings:
 
                 # RWA
-                if(self.use_random_word_addition):
+                if self.use_random_word_addition:
                     # Apply RWA to all the captions in the dataset
-                    self.annotations_text_image_path['findings'] = self.annotations_text_image_path['findings'].apply(lambda x: prompt_augmentation(x, tokenizer=self.tokenizer))
-                    
+                    self.annotations_text_image_path["findings"] = (
+                        self.annotations_text_image_path["findings"].apply(
+                            lambda x: prompt_augmentation(x, tokenizer=self.tokenizer)
+                        )
+                    )
+
                 self.tokens = self.tokenizer(
                     self.annotations_text_image_path["findings"].to_list(),
                     padding="max_length",
@@ -100,10 +106,14 @@ class MimicCXRDataset(torch.utils.data.Dataset):
                     truncation=True,
                 )
             else:
-                if(self.use_random_word_addition):
+                if self.use_random_word_addition:
                     # Apply RWA to all the captions in the dataset
-                    self.annotations_text_image_path['text'] = self.annotations_text_image_path['text'].apply(lambda x: prompt_augmentation(x, tokenizer=self.tokenizer))
-                    
+                    self.annotations_text_image_path["text"] = (
+                        self.annotations_text_image_path["text"].apply(
+                            lambda x: prompt_augmentation(x, tokenizer=self.tokenizer)
+                        )
+                    )
+
                 self.tokens = self.tokenizer(
                     self.annotations_text_image_path["text"].to_list(),
                     padding="max_length",
@@ -136,15 +146,15 @@ class MimicCXRDataset(torch.utils.data.Dataset):
         if self.transform:
             im = self.transform(im)
 
-        if(self.use_findings):
+        if self.use_findings:
             text = self.annotations_text_image_path["findings"].iloc[idx]
-            if(self.use_random_word_addition):
+            if self.use_random_word_addition:
                 text = prompt_augmentation(text, tokenizer=self.tokenizer)
         else:
             text = self.annotations_text_image_path["text"].iloc[idx]
-            if(self.use_random_word_addition):
+            if self.use_random_word_addition:
                 text = prompt_augmentation(text, tokenizer=self.tokenizer)
-                
+
         sample = {
             "image": im,
             "text": text,
@@ -189,6 +199,7 @@ def get_synthetic_df(
 
     return df
 
+
 def insert_rand_word(sentence, word):
     sent_list = sentence.split(" ")
     sent_list.insert(random.randint(0, len(sent_list)), word)
@@ -196,7 +207,9 @@ def insert_rand_word(sentence, word):
     return new_sent
 
 
-def prompt_augmentation(prompt, aug_style="rand_word_add", tokenizer=None, repeat_num=4):
+def prompt_augmentation(
+    prompt, aug_style="rand_word_add", tokenizer=None, repeat_num=4
+):
     if aug_style == "rand_numb_add":
         for i in range(repeat_num):
             randnum = np.random.choice(100000)

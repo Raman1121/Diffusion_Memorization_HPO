@@ -119,7 +119,12 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
                 " results in future versions. If you have downloaded this checkpoint from the Hugging Face Hub, it"
                 " would be very nice if you could open a Pull request for the `transformer/config.json` file"
             )
-            deprecate("norm_type!=num_embeds_ada_norm", "1.0.0", deprecation_message, standard_warn=False)
+            deprecate(
+                "norm_type!=num_embeds_ada_norm",
+                "1.0.0",
+                deprecation_message,
+                standard_warn=False,
+            )
             norm_type = "ada_norm"
 
         if self.is_input_continuous and self.is_input_vectorized:
@@ -132,7 +137,11 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
                 f"Cannot define both `num_vector_embeds`: {num_vector_embeds} and `patch_size`: {patch_size}. Make"
                 " sure that either `num_vector_embeds` or `num_patches` is None."
             )
-        elif not self.is_input_continuous and not self.is_input_vectorized and not self.is_input_patches:
+        elif (
+            not self.is_input_continuous
+            and not self.is_input_vectorized
+            and not self.is_input_patches
+        ):
             raise ValueError(
                 f"Has to define `in_channels`: {in_channels}, `num_vector_embeds`: {num_vector_embeds}, or patch_size:"
                 f" {patch_size}. Make sure that `in_channels`, `num_vector_embeds` or `num_patches` is not None."
@@ -142,14 +151,25 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
         if self.is_input_continuous:
             self.in_channels = in_channels
 
-            self.norm = torch.nn.GroupNorm(num_groups=norm_num_groups, num_channels=in_channels, eps=1e-6, affine=True)
+            self.norm = torch.nn.GroupNorm(
+                num_groups=norm_num_groups,
+                num_channels=in_channels,
+                eps=1e-6,
+                affine=True,
+            )
             if use_linear_projection:
                 self.proj_in = nn.Linear(in_channels, inner_dim)
             else:
-                self.proj_in = nn.Conv2d(in_channels, inner_dim, kernel_size=1, stride=1, padding=0)
+                self.proj_in = nn.Conv2d(
+                    in_channels, inner_dim, kernel_size=1, stride=1, padding=0
+                )
         elif self.is_input_vectorized:
-            assert sample_size is not None, "Transformer2DModel over discrete input must provide sample_size"
-            assert num_vector_embeds is not None, "Transformer2DModel over discrete input must provide num_embed"
+            assert (
+                sample_size is not None
+            ), "Transformer2DModel over discrete input must provide sample_size"
+            assert (
+                num_vector_embeds is not None
+            ), "Transformer2DModel over discrete input must provide num_embed"
 
             self.height = sample_size
             self.width = sample_size
@@ -157,10 +177,15 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
             self.num_latent_pixels = self.height * self.width
 
             self.latent_image_embedding = ImagePositionalEmbeddings(
-                num_embed=num_vector_embeds, embed_dim=inner_dim, height=self.height, width=self.width
+                num_embed=num_vector_embeds,
+                embed_dim=inner_dim,
+                height=self.height,
+                width=self.width,
             )
         elif self.is_input_patches:
-            assert sample_size is not None, "Transformer2DModel over patched input must provide sample_size"
+            assert (
+                sample_size is not None
+            ), "Transformer2DModel over patched input must provide sample_size"
 
             self.height = sample_size
             self.width = sample_size
@@ -202,14 +227,18 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
             if use_linear_projection:
                 self.proj_out = nn.Linear(inner_dim, in_channels)
             else:
-                self.proj_out = nn.Conv2d(inner_dim, in_channels, kernel_size=1, stride=1, padding=0)
+                self.proj_out = nn.Conv2d(
+                    inner_dim, in_channels, kernel_size=1, stride=1, padding=0
+                )
         elif self.is_input_vectorized:
             self.norm_out = nn.LayerNorm(inner_dim)
             self.out = nn.Linear(inner_dim, self.num_vector_embeds - 1)
         elif self.is_input_patches:
             self.norm_out = nn.LayerNorm(inner_dim, elementwise_affine=False, eps=1e-6)
             self.proj_out_1 = nn.Linear(inner_dim, 2 * inner_dim)
-            self.proj_out_2 = nn.Linear(inner_dim, patch_size * patch_size * self.out_channels)
+            self.proj_out_2 = nn.Linear(
+                inner_dim, patch_size * patch_size * self.out_channels
+            )
 
     def forward(
         self,
@@ -250,10 +279,14 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
             if not self.use_linear_projection:
                 hidden_states = self.proj_in(hidden_states)
                 inner_dim = hidden_states.shape[1]
-                hidden_states = hidden_states.permute(0, 2, 3, 1).reshape(batch, height * width, inner_dim)
+                hidden_states = hidden_states.permute(0, 2, 3, 1).reshape(
+                    batch, height * width, inner_dim
+                )
             else:
                 inner_dim = hidden_states.shape[1]
-                hidden_states = hidden_states.permute(0, 2, 3, 1).reshape(batch, height * width, inner_dim)
+                hidden_states = hidden_states.permute(0, 2, 3, 1).reshape(
+                    batch, height * width, inner_dim
+                )
                 hidden_states = self.proj_in(hidden_states)
         elif self.is_input_vectorized:
             hidden_states = self.latent_image_embedding(hidden_states)
@@ -273,11 +306,19 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
         # 3. Output
         if self.is_input_continuous:
             if not self.use_linear_projection:
-                hidden_states = hidden_states.reshape(batch, height, width, inner_dim).permute(0, 3, 1, 2).contiguous()
+                hidden_states = (
+                    hidden_states.reshape(batch, height, width, inner_dim)
+                    .permute(0, 3, 1, 2)
+                    .contiguous()
+                )
                 hidden_states = self.proj_out(hidden_states)
             else:
                 hidden_states = self.proj_out(hidden_states)
-                hidden_states = hidden_states.reshape(batch, height, width, inner_dim).permute(0, 3, 1, 2).contiguous()
+                hidden_states = (
+                    hidden_states.reshape(batch, height, width, inner_dim)
+                    .permute(0, 3, 1, 2)
+                    .contiguous()
+                )
 
             output = hidden_states + residual
         elif self.is_input_vectorized:
@@ -294,17 +335,31 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
                 timestep, class_labels, hidden_dtype=hidden_states.dtype
             )
             shift, scale = self.proj_out_1(F.silu(conditioning)).chunk(2, dim=1)
-            hidden_states = self.norm_out(hidden_states) * (1 + scale[:, None]) + shift[:, None]
+            hidden_states = (
+                self.norm_out(hidden_states) * (1 + scale[:, None]) + shift[:, None]
+            )
             hidden_states = self.proj_out_2(hidden_states)
 
             # unpatchify
             height = width = int(hidden_states.shape[1] ** 0.5)
             hidden_states = hidden_states.reshape(
-                shape=(-1, height, width, self.patch_size, self.patch_size, self.out_channels)
+                shape=(
+                    -1,
+                    height,
+                    width,
+                    self.patch_size,
+                    self.patch_size,
+                    self.out_channels,
+                )
             )
             hidden_states = torch.einsum("nhwpqc->nchpwq", hidden_states)
             output = hidden_states.reshape(
-                shape=(-1, self.out_channels, height * self.patch_size, width * self.patch_size)
+                shape=(
+                    -1,
+                    self.out_channels,
+                    height * self.patch_size,
+                    width * self.patch_size,
+                )
             )
 
         if not return_dict:

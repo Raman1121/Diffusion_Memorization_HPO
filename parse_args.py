@@ -1,6 +1,7 @@
 import argparse
 import os
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument(
@@ -25,7 +26,7 @@ def parse_args():
     parser.add_argument(
         "--dataset",
         type=str,
-        default='MIMIC',
+        default="MIMIC",
         help=(
             "The name of the Dataset (from the HuggingFace hub) to train on (could be your own, possibly private,"
             " dataset). It can also be a path pointing to a local copy of a dataset in your filesystem,"
@@ -449,7 +450,7 @@ def parse_args():
             "max_norm_FID",
             "avg_norm_FID",
             "FID_MIFID",
-            "FID"
+            "FID",
         ],
     )
     parser.add_argument("--num_trials", type=int, default=5)
@@ -463,11 +464,7 @@ def parse_args():
         "--disable_HPO_plotting",
         action="store_true",
     )
-    parser.add_argument(
-        "--num_FID_samples",
-        type=int,
-        default=100
-    )
+    parser.add_argument("--num_FID_samples", type=int, default=100)
     parser.add_argument(
         "--resume_study",
         type=str,
@@ -504,8 +501,6 @@ def parse_args():
         type=int,
         default=1,
     )
-
-
 
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))

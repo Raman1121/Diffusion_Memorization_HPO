@@ -218,7 +218,6 @@ def log_validation(
 
     return images
 
-
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
         args.local_rank = env_local_rank
@@ -237,14 +236,16 @@ def log_validation(
 def main():
     args = parse_args()
 
-    args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type) 
+    args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type)
 
-    if(args.use_random_word_addition):
-        # args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_RWA")  
+    if args.use_random_word_addition:
+        # args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_RWA")
         args.output_dir = args.output_dir + "_RWA"
-    if(args.mitigation_threshold is not None):
-        # args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_Mitigation_{}".format(args.mitigation_threshold))    
-        args.output_dir = args.output_dir + "_Mitigation_{}".format(args.mitigation_threshold)
+    if args.mitigation_threshold is not None:
+        # args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_Mitigation_{}".format(args.mitigation_threshold))
+        args.output_dir = args.output_dir + "_Mitigation_{}".format(
+            args.mitigation_threshold
+        )
 
     # Import CSV path from the YAML file
     with open("data_config.yaml") as file:
@@ -253,7 +254,7 @@ def main():
     args.train_data_path = yaml_data[args.dataset]["train_csv"]
     args.val_data_path = yaml_data[args.dataset]["val_csv"]
 
-    if(args.dataset == 'MIMIC'):
+    if args.dataset == "MIMIC":
         args.test_data_path = yaml_data[args.dataset]["test_csv"]
 
     args.images_path_train = Path(yaml_data[args.dataset]["images_path_train"])
@@ -318,14 +319,15 @@ def main():
 
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="scheduler",
-        cache_dir=args.cache_dir
+        args.pretrained_model_name_or_path,
+        subfolder="scheduler",
+        cache_dir=args.cache_dir,
     )
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="tokenizer",
         revision=args.revision,
-        cache_dir=args.cache_dir
+        cache_dir=args.cache_dir,
     )
 
     def deepspeed_zero_init_disabled_context_manager():
@@ -347,105 +349,111 @@ def main():
             args.pretrained_model_name_or_path,
             subfolder="text_encoder",
             revision=args.revision,
-            cache_dir=args.cache_dir
+            cache_dir=args.cache_dir,
         )
         vae = AutoencoderKL.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision,
-            cache_dir=args.cache_dir
+            args.pretrained_model_name_or_path,
+            subfolder="vae",
+            revision=args.revision,
+            cache_dir=args.cache_dir,
         )
 
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="unet",
         revision=args.non_ema_revision,
-        cache_dir=args.cache_dir
+        cache_dir=args.cache_dir,
     )
 
     # Load the Binary Mask here
-    if(args.binary_mask_path is not None):
+    if args.binary_mask_path is not None:
         binary_mask = np.load(args.binary_mask_path)
         print("Binary Mask: ", binary_mask)
 
     # TODO: Add the UNet PEFT Logic here
     if args.unet_pretraining_type == "lorav2":
         raise NotImplementedError("LoRA v2 is not implemented yet.")
-    
+
     # Normal SV-DIFF
-    elif args.unet_pretraining_type == 'svdiff':
-        unet, optim_params, optim_params_1d  = get_adapted_unet(
-                unet=unet, 
-                method=args.unet_pretraining_type,
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-                cache_dir=args.cache_dir
-            )
-    elif args.unet_pretraining_type == 'auto_svdiff':
+    elif args.unet_pretraining_type == "svdiff":
+        unet, optim_params, optim_params_1d = get_adapted_unet(
+            unet=unet,
+            method=args.unet_pretraining_type,
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            cache_dir=args.cache_dir,
+        )
+    elif args.unet_pretraining_type == "auto_svdiff":
 
         assert binary_mask is not None
         assert len(binary_mask) == 13
 
         # Apply SV-DIFF to U-Net
-        unet_with_svdiff, optim_params, optim_params_1d  = get_adapted_unet(
-                unet=unet, 
-                method="svdiff",
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-                cache_dir=args.cache_dir
-            )
+        unet_with_svdiff, optim_params, optim_params_1d = get_adapted_unet(
+            unet=unet,
+            method="svdiff",
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            cache_dir=args.cache_dir,
+        )
 
         # Apply Mask to SV-DIFF U-Net
-        unet, optim_params, optim_params_1d = enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask)
+        unet, optim_params, optim_params_1d = enable_disable_svdiff_with_mask(
+            unet_with_svdiff, binary_mask
+        )
 
-    elif args.unet_pretraining_type == 'auto_difffit':
+    elif args.unet_pretraining_type == "auto_difffit":
 
         assert binary_mask is not None
         assert len(binary_mask) == 13
 
         # Apply DiffFit to U-Net
         unet_with_difffit = get_adapted_unet(
-                unet=unet, 
-                method="difffit",
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-                cache_dir=args.cache_dir
-            )
+            unet=unet,
+            method="difffit",
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            cache_dir=args.cache_dir,
+        )
 
         # Apply Mask to DiffFit U-Net
-        unet = enable_disable_difffit_with_mask(unet_with_difffit, binary_mask, verbose=False)
-    
-    elif args.unet_pretraining_type == 'auto_attention':
+        unet = enable_disable_difffit_with_mask(
+            unet_with_difffit, binary_mask, verbose=False
+        )
+
+    elif args.unet_pretraining_type == "auto_attention":
 
         assert binary_mask is not None
         assert len(binary_mask) == 16
 
         unet = get_adapted_unet(
-                unet=unet, 
-                method='attention',
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-            )
-        
+            unet=unet,
+            method="attention",
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+        )
+
         # Apply Mask to Attention U-Net
         unet = enable_disable_attention_with_mask(unet, binary_mask)
-        
+
     else:
         # Full FT, N, B, A, DiffFit
         unet = get_adapted_unet(
-                unet=unet, 
-                method=args.unet_pretraining_type,
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-                cache_dir=args.cache_dir
-            )
+            unet=unet,
+            method=args.unet_pretraining_type,
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            cache_dir=args.cache_dir,
+        )
     print("UNET")
     tunable_params = check_tunable_params(unet, False)
 
-    if(args.mitigation_threshold is not None):
+    if args.mitigation_threshold is not None:
         print("Using ICLR'24 Mitigation method")
 
-    if(args.use_random_word_addition):
+    if args.use_random_word_addition:
         print("Using Random Word Addition")
-    
+
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
@@ -571,22 +579,28 @@ def main():
     else:
         optimizer_cls = torch.optim.AdamW
 
-    if(args.unet_pretraining_type == "svdiff" or args.unet_pretraining_type == "auto_svdiff"):
+    if (
+        args.unet_pretraining_type == "svdiff"
+        or args.unet_pretraining_type == "auto_svdiff"
+    ):
         optimizer = optimizer_cls(
-                    [{"params": optim_params}, {"params": optim_params_1d, "lr": args.learning_rate_1d}],
-                    lr=args.learning_rate,
-                    betas=(args.adam_beta1, args.adam_beta2),
-                    weight_decay=args.adam_weight_decay,
-                    eps=args.adam_epsilon,
-                )
+            [
+                {"params": optim_params},
+                {"params": optim_params_1d, "lr": args.learning_rate_1d},
+            ],
+            lr=args.learning_rate,
+            betas=(args.adam_beta1, args.adam_beta2),
+            weight_decay=args.adam_weight_decay,
+            eps=args.adam_epsilon,
+        )
     else:
         optimizer = optimizer_cls(
-                unet.parameters(),
-                lr=args.learning_rate,
-                betas=(args.adam_beta1, args.adam_beta2),
-                weight_decay=args.adam_weight_decay,
-                eps=args.adam_epsilon,
-            )
+            unet.parameters(),
+            lr=args.learning_rate,
+            betas=(args.adam_beta1, args.adam_beta2),
+            weight_decay=args.adam_weight_decay,
+            eps=args.adam_epsilon,
+        )
 
     # Preprocessing the datasets.
     train_transforms = transforms.Compose(
@@ -610,16 +624,18 @@ def main():
     )
 
     val_transforms = transforms.Compose(
-            [
-                transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-                transforms.CenterCrop(args.resolution),
-                transforms.ToTensor(),
-                # transforms.RandomHorizontalFlip(),
-                transforms.Normalize([0.5], [0.5]),
-            ]
-        )
+        [
+            transforms.Resize(
+                args.resolution, interpolation=transforms.InterpolationMode.BILINEAR
+            ),
+            transforms.CenterCrop(args.resolution),
+            transforms.ToTensor(),
+            # transforms.RandomHorizontalFlip(),
+            transforms.Normalize([0.5], [0.5]),
+        ]
+    )
 
-    if(args.dataset == 'MIMIC'):
+    if args.dataset == "MIMIC":
         train_dataset = MimicCXRDataset(
             csv_file=args.train_data_path,
             images_dir=args.images_path_train,
@@ -644,13 +660,13 @@ def main():
             transform=val_transforms,
             seed=args.dataset_split_seed,
         )
-    elif(args.dataset == 'imagenette'):
+    elif args.dataset == "imagenette":
         train_dataset = ImagenetteDataset(
             csv_file=args.train_data_path,
             root_path=args.images_path_train,
             tokenizer=tokenizer,
             transform=train_transforms,
-            use_random_word_addition=args.use_random_word_addition
+            use_random_word_addition=args.use_random_word_addition,
         )
         val_dataset = ImagenetteDataset(
             csv_file=args.val_data_path,
@@ -658,13 +674,13 @@ def main():
             tokenizer=tokenizer,
             transform=val_transforms,
         )
-    elif(args.dataset == 'tuxemon'):
+    elif args.dataset == "tuxemon":
         train_dataset = TuxemonDataset(
             csv_file=args.train_data_path,
             root_path=args.images_path_train,
             tokenizer=tokenizer,
             transform=train_transforms,
-            use_random_word_addition=args.use_random_word_addition
+            use_random_word_addition=args.use_random_word_addition,
         )
         val_dataset = TuxemonDataset(
             csv_file=args.val_data_path,
@@ -672,7 +688,6 @@ def main():
             tokenizer=tokenizer,
             transform=val_transforms,
         )
-
 
     # DataLoaders creation:
     train_dataloader = torch.utils.data.DataLoader(
@@ -687,7 +702,7 @@ def main():
         batch_size=args.train_batch_size,
         num_workers=args.dataloader_num_workers,
     )
-    if(args.dataset == 'MIMIC'):
+    if args.dataset == "MIMIC":
         test_dataloader = torch.utils.data.DataLoader(
             test_dataset,
             shuffle=False,
@@ -804,7 +819,7 @@ def main():
     )
     progress_bar.set_description("Steps")
 
-    if(not args.disable_training):
+    if not args.disable_training:
         for epoch in range(first_epoch, args.num_train_epochs):
             unet.train()
             train_loss = 0.0
@@ -856,7 +871,9 @@ def main():
                             latents, new_noise, timesteps
                         )
                     else:
-                        noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                        noisy_latents = noise_scheduler.add_noise(
+                            latents, noise, timesteps
+                        )
 
                     # Get the text embedding for conditioning
                     encoder_hidden_states = text_encoder(batch["input_ids"])[0]
@@ -910,17 +927,23 @@ def main():
 
                         # import pdb; pdb.set_trace()
 
-                        if(args.mitigation_threshold == 'auto'):
+                        if args.mitigation_threshold == "auto":
                             # Remove the samples with top 10% memorization detection metric
                             auto_threshold = torch.quantile(noise_pred_text_norm, 0.90)
 
-                            model_pred = model_pred[noise_pred_text_norm < auto_threshold]
+                            model_pred = model_pred[
+                                noise_pred_text_norm < auto_threshold
+                            ]
                             target = target[noise_pred_text_norm < auto_threshold]
                         else:
                             args.mitigation_threshold = float(args.mitigation_threshold)
 
-                            model_pred = model_pred[noise_pred_text_norm < args.mitigation_threshold]
-                            target = target[noise_pred_text_norm < args.mitigation_threshold]
+                            model_pred = model_pred[
+                                noise_pred_text_norm < args.mitigation_threshold
+                            ]
+                            target = target[
+                                noise_pred_text_norm < args.mitigation_threshold
+                            ]
 
                     if len(model_pred) != 0:
                         if args.snr_gamma is None:
@@ -950,7 +973,6 @@ def main():
                                 * mse_loss_weights
                             )
                             loss = loss.mean()
-                            
 
                         # Gather the losses across all processes for logging (if we use distributed training).
                         avg_loss = accelerator.gather(
@@ -993,7 +1015,9 @@ def main():
                                 # before we save the new checkpoint, we need to have at _most_ `checkpoints_total_limit - 1` checkpoints
                                 if len(checkpoints) >= args.checkpoints_total_limit:
                                     num_to_remove = (
-                                        len(checkpoints) - args.checkpoints_total_limit + 1
+                                        len(checkpoints)
+                                        - args.checkpoints_total_limit
+                                        + 1
                                     )
                                     removing_checkpoints = checkpoints[0:num_to_remove]
 
@@ -1033,8 +1057,11 @@ def main():
                 ema_unet.copy_to(unet.parameters())
 
             # NOTE: Save pipeline according to the PEFT type
-            if(args.unet_pretraining_type == 'svdiff' or args.unet_pretraining_type == 'auto_svdiff'):
-                svdiff_unet_savedir = os.path.join(args.output_dir, 'unet')
+            if (
+                args.unet_pretraining_type == "svdiff"
+                or args.unet_pretraining_type == "auto_svdiff"
+            ):
+                svdiff_unet_savedir = os.path.join(args.output_dir, "unet")
 
                 if not os.path.exists(svdiff_unet_savedir):
                     os.makedirs(svdiff_unet_savedir)
@@ -1049,10 +1076,10 @@ def main():
                     vae=vae,
                     unet=unet,
                     revision=args.revision,
-                    cache_dir=args.cache_dir
+                    cache_dir=args.cache_dir,
                 )
                 pipeline.save_pretrained(args.output_dir)
-            
+
             else:
                 print("SAVING THE SD PIPELINE AT {}".format(args.output_dir))
 
@@ -1062,7 +1089,7 @@ def main():
                     vae=vae,
                     unet=unet,
                     revision=args.revision,
-                    cache_dir=args.cache_dir
+                    cache_dir=args.cache_dir,
                 )
                 pipeline.save_pretrained(args.output_dir)
 

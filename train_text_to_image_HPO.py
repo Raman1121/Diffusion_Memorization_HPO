@@ -76,35 +76,38 @@ if is_wandb_available():
 
 logger = get_logger(__name__, log_level="INFO")
 
+
 def create_opt_mask(trial, args):
 
-    
-    if(args.unet_pretraining_type == 'auto_svdiff'):
+    if args.unet_pretraining_type == "auto_svdiff":
         args.mask_length = 13
-    elif(args.unet_pretraining_type == 'auto_difffit'):
+    elif args.unet_pretraining_type == "auto_difffit":
         args.mask_length = 13
-    elif(args.unet_pretraining_type == 'auto_attention'):
+    elif args.unet_pretraining_type == "auto_attention":
         args.mask_length = 16
-    elif(args.unet_pretraining_type == 'full' or args.unet_pretraining_type == 'svdiff' or args.unet_pretraining_type == 'difffit'):
+    elif (
+        args.unet_pretraining_type == "full"
+        or args.unet_pretraining_type == "svdiff"
+        or args.unet_pretraining_type == "difffit"
+    ):
         args.mask_length = 13
 
     print("Creating a binary mask of length: ", args.mask_length)
 
-    if("auto_" in args.unet_pretraining_type):
+    if "auto_" in args.unet_pretraining_type:
         mask = np.zeros(args.mask_length, dtype=np.int8)
 
         for i in range(args.mask_length):
             mask[i] = trial.suggest_int("Mask Idx {}".format(i), 0, 1)
-    elif(args.unet_pretraining_type == 'full'):
-        mask = np.array([1]*args.mask_length)
-    elif(args.unet_pretraining_type == 'svdiff'):
-        mask = np.array([2]*args.mask_length)
-    elif(args.unet_pretraining_type == 'difffit'):
-        mask = np.array([3]*args.mask_length)
+    elif args.unet_pretraining_type == "full":
+        mask = np.array([1] * args.mask_length)
+    elif args.unet_pretraining_type == "svdiff":
+        mask = np.array([2] * args.mask_length)
+    elif args.unet_pretraining_type == "difffit":
+        mask = np.array([3] * args.mask_length)
 
     return mask
 
-    
 
 def make_image_grid(imgs, rows, cols):
     assert len(imgs) == rows * cols
@@ -251,7 +254,18 @@ def log_validation(
     return images
 
 
-def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, unet, accelerator, noise_scheduler, weight_dtype, epoch):
+def run_validation_epoch(
+    args,
+    val_dataloader,
+    vae,
+    text_encoder,
+    tokenizer,
+    unet,
+    accelerator,
+    noise_scheduler,
+    weight_dtype,
+    epoch,
+):
     logger.info("Running validation... ")
 
     # Move text_encode and vae to gpu and cast to weight_dtype
@@ -265,7 +279,9 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
 
     for step, batch in enumerate(val_dataloader):
         with torch.no_grad():
-            latents = vae.encode(batch["image"].to(weight_dtype).to(accelerator.device)).latent_dist.sample()
+            latents = vae.encode(
+                batch["image"].to(weight_dtype).to(accelerator.device)
+            ).latent_dist.sample()
             latents = latents * vae.config.scaling_factor
 
         # Sample noise that we'll add to the latents
@@ -279,7 +295,9 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
             new_noise = noise + args.input_perturbation * torch.randn_like(noise)
         bsz = latents.shape[0]
         # Sample a random timestep for each image
-        timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+        timesteps = torch.randint(
+            0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device
+        )
         timesteps = timesteps.long()
 
         # Add noise to the latents according to the noise magnitude at each timestep
@@ -290,9 +308,11 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
             noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
         # Get the text embedding for conditioning
-        
-        encoder_hidden_states = text_encoder(batch["input_ids"].to(accelerator.device))[0]
-        
+
+        encoder_hidden_states = text_encoder(batch["input_ids"].to(accelerator.device))[
+            0
+        ]
+
         # Get the target for loss depending on the prediction type
         if args.prediction_type is not None:
             # set prediction_type of scheduler if defined
@@ -303,11 +323,13 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
         elif noise_scheduler.config.prediction_type == "v_prediction":
             target = noise_scheduler.get_velocity(latents, noise, timesteps)
         else:
-            raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+            raise ValueError(
+                f"Unknown prediction type {noise_scheduler.config.prediction_type}"
+            )
 
         # Predict the noise residual and compute loss
         model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
-    
+
         # Calculating the memorization metric
         uncond_tokens = [""] * len(model_pred)
         uncond_input = tokenizer(
@@ -320,13 +342,9 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
         uncond_prompt_embed = text_encoder(
             uncond_input["input_ids"].to(accelerator.device)
         )[0]
-        noise_pred_uncond = unet(
-            noisy_latents, timesteps, uncond_prompt_embed
-        ).sample
+        noise_pred_uncond = unet(noisy_latents, timesteps, uncond_prompt_embed).sample
         noise_pred_text = model_pred - noise_pred_uncond
-        noise_pred_text = noise_pred_text.reshape(
-            len(noise_pred_text), -1
-        )
+        noise_pred_text = noise_pred_text.reshape(len(noise_pred_text), -1)
         noise_pred_text_norm = noise_pred_text.norm(p=2, dim=1)
 
         # if(args.return_avg_norm):
@@ -337,20 +355,28 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
         #     assert args.return_avg_norm is False
         #     memorization_metric = torch.max(noise_pred_text_norm).cpu().item()
 
-        if(args.objective_metric == 'max_norm' or args.objective_metric == 'max_norm_FID' or args.objective_metric == 'FID_MIFID'):
+        if (
+            args.objective_metric == "max_norm"
+            or args.objective_metric == "max_norm_FID"
+            or args.objective_metric == "FID_MIFID"
+        ):
             memorization_metric = torch.max(noise_pred_text_norm).cpu().item()
-        elif(args.objective_metric == 'avg_norm' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID'):
-            memorization_metric = (torch.sum(noise_pred_text_norm).cpu()/len(timesteps)).item()
+        elif (
+            args.objective_metric == "avg_norm"
+            or args.objective_metric == "avg_norm_FID"
+            or args.objective_metric == "FID_MIFID"
+        ):
+            memorization_metric = (
+                torch.sum(noise_pred_text_norm).cpu() / len(timesteps)
+            ).item()
 
-        if(args.objective_metric == 'FID'):
+        if args.objective_metric == "FID":
             memorization_metric = np.nan
         else:
             memorization_metric_global += memorization_metric
-        
+
         if args.snr_gamma is None:
-            loss = F.mse_loss(
-                model_pred.float(), target.float(), reduction="mean"
-            )
+            loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
         else:
             snr = compute_snr(timesteps)
             mse_loss_weights = (
@@ -363,15 +389,10 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
             # We first calculate the original loss. Then we mean over the non-batch dimensions and
             # rebalance the sample-wise losses with their respective loss weights.
             # Finally, we take the mean of the rebalanced loss.
-            loss = F.mse_loss(
-                model_pred.float(), target.float(), reduction="none"
-            )
-            loss = (
-                loss.mean(dim=list(range(1, len(loss.shape))))
-                * mse_loss_weights
-            )
+            loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
+            loss = loss.mean(dim=list(range(1, len(loss.shape)))) * mse_loss_weights
             loss = loss.mean()
-        
+
         val_loss += loss.item()
 
     val_loss /= len(val_dataloader)
@@ -379,7 +400,6 @@ def run_validation_epoch(args, val_dataloader, vae, text_encoder, tokenizer, une
     # logger.info(f"Validation loss: {val_loss}")
 
     return val_loss, memorization_metric_global
-
 
 
 def prepare_memorization_data(args, tokenizer):
@@ -391,7 +411,7 @@ def prepare_memorization_data(args, tokenizer):
     args.memorization_data_path = yaml_data[args.dataset]["memorization_csv"]
     args.test_data_path = yaml_data[args.dataset]["test_csv"]
 
-    if(args.dataset == 'MIMIC'):
+    if args.dataset == "MIMIC":
         mem_df = pd.read_excel(args.memorization_data_path)
         test_df = pd.read_excel(args.test_data_path)
 
@@ -424,7 +444,7 @@ def prepare_memorization_data(args, tokenizer):
     )
 
     train_dataset_original = MimicCXRDataset(
-        csv_file=args.original_train_data_path,   
+        csv_file=args.original_train_data_path,
         images_dir=args.images_path_train,
         tokenizer=tokenizer,
         transform=train_transforms,
@@ -456,7 +476,9 @@ def prepare_memorization_data(args, tokenizer):
     # )
 
     # The training dataset would consist of the original dataset and the memorization dataset repeated 'args.n_repeats' times
-    train_dataset = ConcatDataset([train_dataset_original] + [train_dataset_mem]*args.n_repeats)
+    train_dataset = ConcatDataset(
+        [train_dataset_original] + [train_dataset_mem] * args.n_repeats
+    )
 
     # DataLoaders creation:
     train_dataloader = torch.utils.data.DataLoader(
@@ -481,8 +503,14 @@ def prepare_memorization_data(args, tokenizer):
     #     num_workers=args.dataloader_num_workers,
     # )
 
-    return train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, mem_df, test_df
-
+    return (
+        train_dataset,
+        train_dataset_mem,
+        train_dataloader,
+        train_dataloader_mem,
+        mem_df,
+        test_df,
+    )
 
 
 def prepare_data(args, tokenizer):
@@ -520,14 +548,16 @@ def prepare_data(args, tokenizer):
     )
 
     val_transforms = transforms.Compose(
-            [
-                transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-                transforms.CenterCrop(args.resolution),
-                transforms.ToTensor(),
-                # transforms.RandomHorizontalFlip(),
-                transforms.Normalize([0.5], [0.5]),
-            ]
-        )
+        [
+            transforms.Resize(
+                args.resolution, interpolation=transforms.InterpolationMode.BILINEAR
+            ),
+            transforms.CenterCrop(args.resolution),
+            transforms.ToTensor(),
+            # transforms.RandomHorizontalFlip(),
+            transforms.Normalize([0.5], [0.5]),
+        ]
+    )
 
     train_dataset = MimicCXRDataset(
         csv_file=args.train_data_path,
@@ -573,7 +603,15 @@ def prepare_data(args, tokenizer):
         num_workers=args.dataloader_num_workers,
     )
 
-    return train_dataset, val_dataset, test_dataset, train_dataloader, val_dataloader, test_dataloader
+    return (
+        train_dataset,
+        val_dataset,
+        test_dataset,
+        train_dataloader,
+        val_dataloader,
+        test_dataloader,
+    )
+
 
 def prepare_model(args, binary_mask=None):
     unet = UNet2DConditionModel.from_pretrained(
@@ -582,77 +620,82 @@ def prepare_model(args, binary_mask=None):
         revision=args.non_ema_revision,
     )
 
-    if args.unet_pretraining_type == 'svdiff':
-        unet, optim_params, optim_params_1d  = get_adapted_unet(
-                unet=unet, 
-                method=args.unet_pretraining_type,
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-                cache_dir=args.cache_dir
-            )
+    if args.unet_pretraining_type == "svdiff":
+        unet, optim_params, optim_params_1d = get_adapted_unet(
+            unet=unet,
+            method=args.unet_pretraining_type,
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            cache_dir=args.cache_dir,
+        )
         return unet, optim_params, optim_params_1d
 
-    elif args.unet_pretraining_type == 'auto_svdiff':
+    elif args.unet_pretraining_type == "auto_svdiff":
 
         assert binary_mask is not None
 
         # Apply SV-DIFF to U-Net
-        unet_with_svdiff, optim_params, optim_params_1d  = get_adapted_unet(
-                unet=unet, 
-                method="svdiff",
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-                cache_dir=args.cache_dir
-            )
+        unet_with_svdiff, optim_params, optim_params_1d = get_adapted_unet(
+            unet=unet,
+            method="svdiff",
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            cache_dir=args.cache_dir,
+        )
 
         # Apply Mask to SV-DIFF U-Net
-        unet, optim_params, optim_params_1d = enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask)
+        unet, optim_params, optim_params_1d = enable_disable_svdiff_with_mask(
+            unet_with_svdiff, binary_mask
+        )
 
         return unet, optim_params, optim_params_1d
 
-    elif args.unet_pretraining_type == 'auto_difffit':
+    elif args.unet_pretraining_type == "auto_difffit":
 
         assert binary_mask is not None
 
         # Apply DiffFit to U-Net
         unet_with_difffit = get_adapted_unet(
-                unet=unet, 
-                method="difffit",
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-                cache_dir=args.cache_dir
-            )
+            unet=unet,
+            method="difffit",
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            cache_dir=args.cache_dir,
+        )
 
         # Apply Mask to DiffFit U-Net
-        unet = enable_disable_difffit_with_mask(unet_with_difffit, binary_mask, verbose=False)
+        unet = enable_disable_difffit_with_mask(
+            unet_with_difffit, binary_mask, verbose=False
+        )
 
-    elif args.unet_pretraining_type == 'auto_attention':
+    elif args.unet_pretraining_type == "auto_attention":
 
         assert binary_mask is not None
-        
+
         unet = get_adapted_unet(
-                unet=unet, 
-                method='attention',
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-                cache_dir=args.cache_dir
-            )
-        
+            unet=unet,
+            method="attention",
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            cache_dir=args.cache_dir,
+        )
+
         # Apply Mask to Attention U-Net
         unet = enable_disable_attention_with_mask(unet, binary_mask)
-        
+
     else:
         # Full FT, N, B, A, DiffFit
         unet = get_adapted_unet(
-                unet=unet, 
-                method=args.unet_pretraining_type,
-                args=args,
-                pretrained_model_name_or_path=args.pretrained_model_name_or_path,
-                cache_dir=args.cache_dir
-                # unet_block_idx=args.unet_block_idx,
-            )
-    
+            unet=unet,
+            method=args.unet_pretraining_type,
+            args=args,
+            pretrained_model_name_or_path=args.pretrained_model_name_or_path,
+            cache_dir=args.cache_dir,
+            # unet_block_idx=args.unet_block_idx,
+        )
+
     return unet
+
 
 def prepare_optimizer(args, parameters):
     if args.scale_lr:
@@ -694,15 +737,15 @@ def objective(trial):
 
     args.learning_rate = None
 
-    if("auto_" in args.unet_pretraining_type):
+    if "auto_" in args.unet_pretraining_type:
         args.learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True)
         print("Suggested learning rate: ", args.learning_rate)
-    elif(args.unet_pretraining_type == 'full' and args.learning_rate is None):
+    elif args.unet_pretraining_type == "full" and args.learning_rate is None:
         args.learning_rate = trial.suggest_float("learning_rate", 5e-6, 1e-5, log=True)
         print("Suggested learning rate for Full FT: ", args.learning_rate)
     else:
         print("Fixed learning rate: ", args.learning_rate)
-    
+
     if args.non_ema_revision is not None:
         deprecate(
             "non_ema_revision!=None",
@@ -791,41 +834,42 @@ def objective(trial):
             args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision
         )
 
-    
-
     # TODO: Add the UNet PEFT Logic here
     # if args.unet_pretraining_type == "lorav2":
     #     raise NotImplementedError("LoRA v2 is not implemented yet.")
-    
+
     # Move model creation logic to a separate function
     # elif args.unet_pretraining_type == 'svdiff':
     #     unet, optim_params, optim_params_1d  = get_adapted_unet(
-    #             unet=unet, 
+    #             unet=unet,
     #             method=args.unet_pretraining_type,
     #             args=args,
     #             pretrained_model_name_or_path=args.pretrained_model_name_or_path,
     #         )
-    
+
     # else:
     #     unet = get_adapted_unet(
-    #             unet=unet, 
+    #             unet=unet,
     #             method=args.unet_pretraining_type,
     #             args=args,
     #             pretrained_model_name_or_path=args.pretrained_model_name_or_path,
     #             # unet_block_idx=args.unet_block_idx,
     #         )
-    
+
     print("UNET")
     binary_mask = create_opt_mask(trial, args)
     print("BINARY MASK: ", binary_mask)
 
-    if(args.unet_pretraining_type == 'svdiff' or args.unet_pretraining_type == 'auto_svdiff'):
+    if (
+        args.unet_pretraining_type == "svdiff"
+        or args.unet_pretraining_type == "auto_svdiff"
+    ):
         unet, optim_params, optim_params_1d = prepare_model(args, binary_mask)
     else:
         unet = prepare_model(args, binary_mask)
-        
+
     tunable_params = check_tunable_params(unet, False)
-    
+
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
@@ -944,26 +988,39 @@ def objective(trial):
 
     optimizer_cls = torch.optim.AdamW
 
-    if(args.unet_pretraining_type == "svdiff" or args.unet_pretraining_type == "auto_svdiff"):
+    if (
+        args.unet_pretraining_type == "svdiff"
+        or args.unet_pretraining_type == "auto_svdiff"
+    ):
         optimizer = optimizer_cls(
-                    [{"params": optim_params}, {"params": optim_params_1d, "lr": args.learning_rate_1d}],
-                    lr=args.learning_rate,
-                    betas=(args.adam_beta1, args.adam_beta2),
-                    weight_decay=args.adam_weight_decay,
-                    eps=args.adam_epsilon,
-                )
+            [
+                {"params": optim_params},
+                {"params": optim_params_1d, "lr": args.learning_rate_1d},
+            ],
+            lr=args.learning_rate,
+            betas=(args.adam_beta1, args.adam_beta2),
+            weight_decay=args.adam_weight_decay,
+            eps=args.adam_epsilon,
+        )
     else:
         optimizer = optimizer_cls(
-                unet.parameters(),
-                lr=args.learning_rate,
-                betas=(args.adam_beta1, args.adam_beta2),
-                weight_decay=args.adam_weight_decay,
-                eps=args.adam_epsilon,
-            )
+            unet.parameters(),
+            lr=args.learning_rate,
+            betas=(args.adam_beta1, args.adam_beta2),
+            weight_decay=args.adam_weight_decay,
+            eps=args.adam_epsilon,
+        )
 
     # Prepare Datasets and DataLoaders
     # train_dataset, val_dataset, test_dataset, train_dataloader, val_dataloader, test_dataloader = prepare_data(args, tokenizer)
-    train_dataset, train_dataset_mem, train_dataloader, train_dataloader_mem, mem_df, test_df = prepare_memorization_data(args, tokenizer)
+    (
+        train_dataset,
+        train_dataset_mem,
+        train_dataloader,
+        train_dataloader_mem,
+        mem_df,
+        test_df,
+    ) = prepare_memorization_data(args, tokenizer)
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
@@ -1073,7 +1130,7 @@ def objective(trial):
     )
     progress_bar.set_description("Steps")
 
-    if(not args.disable_training):
+    if not args.disable_training:
         for epoch in range(first_epoch, args.num_train_epochs):
             unet.train()
             train_loss = 0.0
@@ -1125,7 +1182,9 @@ def objective(trial):
                             latents, new_noise, timesteps
                         )
                     else:
-                        noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                        noisy_latents = noise_scheduler.add_noise(
+                            latents, noise, timesteps
+                        )
 
                     # Get the text embedding for conditioning
                     encoder_hidden_states = text_encoder(batch["input_ids"])[0]
@@ -1174,14 +1233,13 @@ def objective(trial):
                     #     )
                     #     noise_pred_text_norm = noise_pred_text.norm(p=2, dim=1)
 
-                        # TODO: Ask What do the following lines do?
-                        # Answer: Remove the samples that have a memorization detection metric above the threshold
-                        # args.hard_threshold = 0.1
-                        # model_pred = model_pred[noise_pred_text_norm < args.hard_threshold]
-                        # target = target[noise_pred_text_norm < args.hard_threshold]
+                    # TODO: Ask What do the following lines do?
+                    # Answer: Remove the samples that have a memorization detection metric above the threshold
+                    # args.hard_threshold = 0.1
+                    # model_pred = model_pred[noise_pred_text_norm < args.hard_threshold]
+                    # target = target[noise_pred_text_norm < args.hard_threshold]
 
-                        # import pdb; pdb.set_trace()
-                        
+                    # import pdb; pdb.set_trace()
 
                     if len(model_pred) != 0:
                         if args.snr_gamma is None:
@@ -1252,7 +1310,9 @@ def objective(trial):
                                 # before we save the new checkpoint, we need to have at _most_ `checkpoints_total_limit - 1` checkpoints
                                 if len(checkpoints) >= args.checkpoints_total_limit:
                                     num_to_remove = (
-                                        len(checkpoints) - args.checkpoints_total_limit + 1
+                                        len(checkpoints)
+                                        - args.checkpoints_total_limit
+                                        + 1
                                     )
                                     removing_checkpoints = checkpoints[0:num_to_remove]
 
@@ -1283,28 +1343,36 @@ def objective(trial):
 
                 if global_step >= args.max_train_steps:
                     break
-                
+
         # Run Validation Step
         # Preferable to run this at the end of training
 
-        
         # if(global_step % args.validation_steps == 0 and global_step != 0):
         if args.use_ema:
             # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
             ema_unet.store(unet.parameters())
             ema_unet.copy_to(unet.parameters())
 
-        val_loss, memorization_metric = run_validation_epoch(args, train_dataloader_mem, vae, text_encoder, tokenizer, unet, accelerator, noise_scheduler, weight_dtype, epoch)
+        val_loss, memorization_metric = run_validation_epoch(
+            args,
+            train_dataloader_mem,
+            vae,
+            text_encoder,
+            tokenizer,
+            unet,
+            accelerator,
+            noise_scheduler,
+            weight_dtype,
+            epoch,
+        )
         logger.info(f"Validation loss: {val_loss}")
         logger.info(f"Memorization Detection Metric: {memorization_metric}")
-        
+
         if args.use_ema:
             # Switch back to the original UNet parameters.
             ema_unet.restore(unet.parameters())
 
         accelerator.end_training()
-
-        
 
         # Run an inference on Memorization Prompts to calculate the FID SCORE
         # Create the pipeline using the trained modules and save it.
@@ -1317,16 +1385,18 @@ def objective(trial):
                 ema_unet.copy_to(unet.parameters())
 
             pipeline = StableDiffusionPipeline.from_pretrained(
-                    args.pretrained_model_name_or_path,
-                    text_encoder=text_encoder,
-                    vae=vae.to(torch.float32),  # Keeping VAE in float32 allows using mixed_precision=fp16 for training
-                    unet=unet,
-                    revision=args.revision,
-                    safety_checker=None,
-                )
+                args.pretrained_model_name_or_path,
+                text_encoder=text_encoder,
+                vae=vae.to(
+                    torch.float32
+                ),  # Keeping VAE in float32 allows using mixed_precision=fp16 for training
+                unet=unet,
+                revision=args.revision,
+                safety_checker=None,
+            )
             pipeline = pipeline.to(accelerator.device)
             pipeline.torch_dtype = weight_dtype
-            
+
             # pipeline.save_pretrained(args.output_dir)
 
             # Generate images
@@ -1338,13 +1408,16 @@ def objective(trial):
             # TEST_PROMPTS = random.sample(test_df["text"].tolist(), 100)
             # Select a subset of 100 samples from the dataframe
             K = args.num_FID_samples
-            test_df = test_df.sample(n=K, random_state=args.dataset_split_seed).reset_index(drop=True)
+            test_df = test_df.sample(
+                n=K, random_state=args.dataset_split_seed
+            ).reset_index(drop=True)
             # test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
 
             test_transforms = transforms.Compose(
                 [
                     transforms.Resize(
-                        args.resolution, interpolation=transforms.InterpolationMode.BILINEAR
+                        args.resolution,
+                        interpolation=transforms.InterpolationMode.BILINEAR,
                     ),
                     (
                         transforms.CenterCrop(args.resolution)
@@ -1355,15 +1428,15 @@ def objective(trial):
                     transforms.Normalize([0.5], [0.5]),
                 ]
             )
-        
+
             # Create dataset from test_df
             test_dataset = MimicCXRDataset(
-                csv_file=test_df,   
+                csv_file=test_df,
                 images_dir=args.images_path_train,
                 tokenizer=tokenizer,
                 transform=test_transforms,
                 seed=args.dataset_split_seed,
-                dataset_size_ratio=1.0,         # We have already done the splitting
+                dataset_size_ratio=1.0,  # We have already done the splitting
                 use_real_images=True,
             )
 
@@ -1376,9 +1449,7 @@ def objective(trial):
                 shuffle=False,
             )
 
-
             print("Generating synthetic images using the fine-tuned model.")
-            
 
             FID_START_TIME = time.time()
             idxx = 0
@@ -1389,37 +1460,45 @@ def objective(trial):
                     width=args.resolution,
                     guidance_scale=4,
                     num_inference_steps=50,
-                    num_images_per_prompt=1
+                    num_images_per_prompt=1,
                 )
 
                 for i, img in enumerate(result.images):
-                    img_name = 'image_{}'.format(i+idxx)
+                    img_name = "image_{}".format(i + idxx)
                     img.save(os.path.join(args.synthetic_images_dir, img_name + ".jpg"))
 
                 idxx += 64
-        
+
             # Calculate the FID Score
             # print("Calculating the FID Score.")
             # We need image tensors of both real and synthetic images
-            test_df['path'] = test_df['path'].apply(lambda x: os.path.join(args.images_path_val, x))
-            mem_df['path'] = mem_df['path'].apply(lambda x: os.path.join(args.images_path_train, x))
-            real_image_paths = test_df['path'].tolist()
+            test_df["path"] = test_df["path"].apply(
+                lambda x: os.path.join(args.images_path_val, x)
+            )
+            mem_df["path"] = mem_df["path"].apply(
+                lambda x: os.path.join(args.images_path_train, x)
+            )
+            real_image_paths = test_df["path"].tolist()
             print("Preparing Real Image Tensors")
             real_images = get_images_tensor_from_paths(real_image_paths)
 
             # Get the synthetic image paths
             print("Preparing Synthetic Image Tensors")
-            synthetic_image_paths = glob.glob(os.path.join(args.synthetic_images_dir, "*.jpg"))
+            synthetic_image_paths = glob.glob(
+                os.path.join(args.synthetic_images_dir, "*.jpg")
+            )
             synthetic_images = get_images_tensor_from_paths(synthetic_image_paths)
 
             # Calculate the FID Score
-            fid_score = compute_fid(real_images, synthetic_images, device=accelerator.device)
+            fid_score = compute_fid(
+                real_images, synthetic_images, device=accelerator.device
+            )
             # mifid_score = compute_mifid(real_images, synthetic_images, device=accelerator.device)
             print("FID SCORE: ", fid_score)
 
             FID_END_TIME = time.time()
 
-            if(args.objective_metric == 'FID_MIFID'):
+            if args.objective_metric == "FID_MIFID":
                 # Calculate MIFID on memorization subset
 
                 os.makedirs(args.synthetic_train_images_dir)
@@ -1433,31 +1512,36 @@ def objective(trial):
                         width=args.resolution,
                         guidance_scale=4,
                         num_inference_steps=50,
-                        num_images_per_prompt=1
+                        num_images_per_prompt=1,
                     )
 
                     for i, img in enumerate(result.images):
-                        img_name = 'image_{}'.format(i+idxx)
-                        img.save(os.path.join(args.synthetic_train_images_dir, img_name + ".jpg"))
+                        img_name = "image_{}".format(i + idxx)
+                        img.save(
+                            os.path.join(
+                                args.synthetic_train_images_dir, img_name + ".jpg"
+                            )
+                        )
 
                     idxx += 64
 
                 # Prepare real image tensors
-                real_image_paths = mem_df['path'].tolist()
+                real_image_paths = mem_df["path"].tolist()
                 print("Preparing Real Image Tensors")
                 real_images = get_images_tensor_from_paths(real_image_paths)
 
                 # Prepare synthetic image tensors
                 print("Preparing Synthetic Image Tensors")
-                synthetic_image_paths = glob.glob(os.path.join(args.synthetic_train_images_dir, "*.jpg"))
+                synthetic_image_paths = glob.glob(
+                    os.path.join(args.synthetic_train_images_dir, "*.jpg")
+                )
                 synthetic_images = get_images_tensor_from_paths(synthetic_image_paths)
 
                 # Calculate the MIFID Score
-                mifid_score = compute_mifid(real_images, synthetic_images, device=accelerator.device)
+                mifid_score = compute_mifid(
+                    real_images, synthetic_images, device=accelerator.device
+                )
                 print("MIFID SCORE: ", mifid_score)
-
-
-
 
         end_time = time.time()
         print("Time taken for this HPO iteration: ", end_time - start_time)
@@ -1483,38 +1567,73 @@ def objective(trial):
         try:
             logs_df = pd.read_csv(os.path.join(logs_savedir, "logs.csv"))
         except:
-            
-            cols = ['params_Mask Idx {}'.format(i) for i in range(args.mask_length)] + ['learning_rate' ,'memorization_metric', 'FID_Score', 'time_taken']
+
+            cols = ["params_Mask Idx {}".format(i) for i in range(args.mask_length)] + [
+                "learning_rate",
+                "memorization_metric",
+                "FID_Score",
+                "time_taken",
+            ]
             logs_df = pd.DataFrame(columns=cols)
             print(logs_df)
-        
+
         # Add to logs df
         _bm = [int(i) for i in binary_mask]
 
         # if('MIFID' not in args.objective_metric):
-        if(args.objective_metric == 'max_norm' or args.objective_metric == 'avg_norm'):
-            _row = list(_bm) + [args.learning_rate, memorization_metric, fid_score, end_time - start_time]
-        elif(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'):
-            _row = list(_bm) + [args.learning_rate, memorization_metric, fid_score, end_time - start_time]
-        elif(args.objective_metric == 'FID_MIFID'):
-            _row = list(_bm) + [args.learning_rate, mifid_score, fid_score, end_time - start_time]
-        elif(args.objective_metric == 'FID'):
-            _row = list(_bm) + [args.learning_rate, np.nan, fid_score, end_time - start_time]
+        if args.objective_metric == "max_norm" or args.objective_metric == "avg_norm":
+            _row = list(_bm) + [
+                args.learning_rate,
+                memorization_metric,
+                fid_score,
+                end_time - start_time,
+            ]
+        elif (
+            args.objective_metric == "max_norm_FID"
+            or args.objective_metric == "avg_norm_FID"
+        ):
+            _row = list(_bm) + [
+                args.learning_rate,
+                memorization_metric,
+                fid_score,
+                end_time - start_time,
+            ]
+        elif args.objective_metric == "FID_MIFID":
+            _row = list(_bm) + [
+                args.learning_rate,
+                mifid_score,
+                fid_score,
+                end_time - start_time,
+            ]
+        elif args.objective_metric == "FID":
+            _row = list(_bm) + [
+                args.learning_rate,
+                np.nan,
+                fid_score,
+                end_time - start_time,
+            ]
 
         logs_df.loc[len(logs_df)] = _row
         logs_df.to_csv(os.path.join(logs_savedir, "logs.csv"), index=False)
 
         # Pruning
-        if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID')): # Pruning NOT supported for Multi-objective HPO
+        if not (
+            args.objective_metric == "max_norm_FID"
+            or args.objective_metric == "avg_norm_FID"
+            or args.objective_metric == "FID_MIFID"
+        ):  # Pruning NOT supported for Multi-objective HPO
             trial.report(memorization_metric, epoch)
             if trial.should_prune():
                 raise optuna.exceptions.TrialPruned()
 
-        if(args.objective_metric == 'max_norm' or args.objective_metric == 'avg_norm'):
+        if args.objective_metric == "max_norm" or args.objective_metric == "avg_norm":
             return memorization_metric
-        elif(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID'): # Multi-objective HPO
+        elif (
+            args.objective_metric == "max_norm_FID"
+            or args.objective_metric == "avg_norm_FID"
+        ):  # Multi-objective HPO
             return memorization_metric, fid_score
-        elif(args.objective_metric == 'FID_MIFID'):
+        elif args.objective_metric == "FID_MIFID":
             return fid_score, mifid_score
         else:
             return memorization_metric
@@ -1528,7 +1647,9 @@ if __name__ == "__main__":
 
     args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type)
     args.synthetic_images_dir = os.path.join(args.output_dir, "Synthetic Images")
-    args.synthetic_train_images_dir = os.path.join(args.output_dir, "Synthetic Images Train")
+    args.synthetic_train_images_dir = os.path.join(
+        args.output_dir, "Synthetic Images Train"
+    )
 
     if args.pruner == "SuccessiveHalving":
         pruner = optuna.pruners.SuccessiveHalvingPruner()
@@ -1540,18 +1661,35 @@ if __name__ == "__main__":
         raise NotImplementedError("Pruner not implemented yet.")
 
     # Creating a study DB
-    optuna.logging.get_logger("optuna").addHandler(
-            logging.StreamHandler(sys.stdout)
-    )
+    optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
 
     # Creating the Optuna study
     # storage_name = "sqlite:///{}.db".format(args.optuna_storage_name)
-    if(args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID'):
-        directions = ["minimize", "minimize"]   # We want to minimize both memorization metric and FID Score
-        study = optuna.create_study(directions=directions, pruner=pruner, study_name=args.optuna_study_name, storage=args.optuna_storage_name, load_if_exists=True)
+    if (
+        args.objective_metric == "max_norm_FID"
+        or args.objective_metric == "avg_norm_FID"
+        or args.objective_metric == "FID_MIFID"
+    ):
+        directions = [
+            "minimize",
+            "minimize",
+        ]  # We want to minimize both memorization metric and FID Score
+        study = optuna.create_study(
+            directions=directions,
+            pruner=pruner,
+            study_name=args.optuna_study_name,
+            storage=args.optuna_storage_name,
+            load_if_exists=True,
+        )
     else:
         direction = "minimize"
-        study = optuna.create_study(direction=direction, pruner=pruner, study_name=args.optuna_study_name, storage=args.optuna_storage_name, load_if_exists=True)
+        study = optuna.create_study(
+            direction=direction,
+            pruner=pruner,
+            study_name=args.optuna_study_name,
+            storage=args.optuna_storage_name,
+            load_if_exists=True,
+        )
 
     # Start the HPO Process
     study.optimize(objective, n_trials=args.num_trials, show_progress_bar=True)
@@ -1564,12 +1702,14 @@ if __name__ == "__main__":
     print("  Number of pruned trials: ", len(pruned_trials))
     print("  Number of complete trials: ", len(complete_trials))
 
-    mask_savedir = os.path.join(
-            args.output_dir, "Saved Masks"
-        )
+    mask_savedir = os.path.join(args.output_dir, "Saved Masks")
     os.makedirs(mask_savedir, exist_ok=True)
 
-    if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID')):
+    if not (
+        args.objective_metric == "max_norm_FID"
+        or args.objective_metric == "avg_norm_FID"
+        or args.objective_metric == "FID_MIFID"
+    ):
         print("Best trial:")
         trial = study.best_trial
 
@@ -1582,10 +1722,10 @@ if __name__ == "__main__":
             if key == "lr":
                 continue
             best_mask.append(value)
-        
+
         # Save the best mask
         best_mask = np.array(best_mask).astype(np.int8)
-        
+
         print("Saving the best mask at: ", mask_savedir)
         mask_name = "best_mask.npy"
         np.save(os.path.join(mask_savedir, mask_name), best_mask)
@@ -1604,7 +1744,7 @@ if __name__ == "__main__":
                 "datetime_start",
                 "datetime_complete",
                 "duration",
-                #"system_attrs_completed_rung_0",
+                # "system_attrs_completed_rung_0",
             ],
             axis=1,
         )  # Drop unnecessary columns
@@ -1617,19 +1757,32 @@ if __name__ == "__main__":
     args.plots_save_dir = os.path.join(args.output_dir, "HPO plots")
     os.makedirs(args.plots_save_dir, exist_ok=True)
 
-    if(not (args.objective_metric == 'max_norm_FID' or args.objective_metric == 'avg_norm_FID' or args.objective_metric == 'FID_MIFID')):
+    if not (
+        args.objective_metric == "max_norm_FID"
+        or args.objective_metric == "avg_norm_FID"
+        or args.objective_metric == "FID_MIFID"
+    ):
         df = df.rename(columns={"value": args.objective_metric})
     else:
-        df = df.rename(columns={"values_0": "memorization_metric", "values_1": "FID_Score"})
+        df = df.rename(
+            columns={"values_0": "memorization_metric", "values_1": "FID_Score"}
+        )
 
-    df.to_csv(os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False)
+    df.to_csv(
+        os.path.join(args.output_dir, stats_df_savedir, stats_df_name), index=False
+    )
 
-    if("auto_" in args.unet_pretraining_type):
-        pareto_frontier_df = pareto_frontier(args, df, x_column='memorization_metric', y_column='FID_Score')
-        pareto_frontier_df.to_csv(os.path.join(args.output_dir, stats_df_savedir, "pareto_frontier.csv"), index=False)
+    if "auto_" in args.unet_pretraining_type:
+        pareto_frontier_df = pareto_frontier(
+            args, df, x_column="memorization_metric", y_column="FID_Score"
+        )
+        pareto_frontier_df.to_csv(
+            os.path.join(args.output_dir, stats_df_savedir, "pareto_frontier.csv"),
+            index=False,
+        )
 
         # Iterate over the pareto frontier dataframe and save the masks
-        cols = ['params_Mask Idx {}'.format(i) for i in range(13)]
+        cols = ["params_Mask Idx {}".format(i) for i in range(13)]
         mask_df = pareto_frontier_df[cols]
 
         for idx, row in mask_df.iterrows():
@@ -1637,8 +1790,6 @@ if __name__ == "__main__":
             mask = mask.astype(np.int8)
             mask_name = "best_mask_{}.npy".format(idx)
             np.save(os.path.join(mask_savedir, mask_name), mask)
-
-
 
     #################### Plotting ####################
 
@@ -1660,7 +1811,7 @@ if __name__ == "__main__":
             )
         except:
             print("Error in plotting parameter importance plot")
-        
+
         # b) Contour Plot
         try:
             contour_fig = plt.figure()

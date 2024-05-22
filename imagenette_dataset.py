@@ -6,7 +6,9 @@ import pandas as pd
 from pathlib import Path
 from PIL import ImageFile
 import numpy as np
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 
 def insert_rand_word(sentence, word):
     sent_list = sentence.split(" ")
@@ -15,7 +17,9 @@ def insert_rand_word(sentence, word):
     return new_sent
 
 
-def prompt_augmentation(prompt, aug_style="rand_word_add", tokenizer=None, repeat_num=4):
+def prompt_augmentation(
+    prompt, aug_style="rand_word_add", tokenizer=None, repeat_num=4
+):
     if aug_style == "rand_numb_add":
         for i in range(repeat_num):
             randnum = np.random.choice(100000)
@@ -34,16 +38,18 @@ def prompt_augmentation(prompt, aug_style="rand_word_add", tokenizer=None, repea
         raise Exception("This style of prompt augmnentation is not written")
     return prompt
 
+
 class ImagenetteDataset(torch.utils.data.Dataset):
 
     def __init__(
-                self, 
-                csv_file, root_path, 
-                tokenizer=None, 
-                transform=None, 
-                classifier_guidance_dropout=0.1, 
-                use_random_word_addition = False
-            ):
+        self,
+        csv_file,
+        root_path,
+        tokenizer=None,
+        transform=None,
+        classifier_guidance_dropout=0.1,
+        use_random_word_addition=False,
+    ):
         self.csv_file = csv_file
         self.root_path = root_path
         self.tokenizer = tokenizer
@@ -55,8 +61,10 @@ class ImagenetteDataset(torch.utils.data.Dataset):
 
         if self.tokenizer is not None:
             # RWA
-            if(self.use_random_word_addition):
-                self.df['text'] = self.df['text'].apply(lambda x: prompt_augmentation(x, tokenizer=self.tokenizer))
+            if self.use_random_word_addition:
+                self.df["text"] = self.df["text"].apply(
+                    lambda x: prompt_augmentation(x, tokenizer=self.tokenizer)
+                )
 
             self.tokens = self.tokenizer(
                 self.df["text"].to_list(),
@@ -74,15 +82,12 @@ class ImagenetteDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.df)
-    
+
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img_path = (
-            self.root_path
-            / self.df["path"].iloc[idx]
-        )
+        img_path = self.root_path / self.df["path"].iloc[idx]
 
         try:
             im = Image.open(img_path).convert("RGB")
@@ -93,7 +98,7 @@ class ImagenetteDataset(torch.utils.data.Dataset):
             im = self.transform(im)
 
         text = self.df["text"].iloc[idx]
-        if(self.use_random_word_addition):
+        if self.use_random_word_addition:
             text = prompt_augmentation(text, tokenizer=self.tokenizer)
 
         sample = {
@@ -114,15 +119,3 @@ class ImagenetteDataset(torch.utils.data.Dataset):
             sample["attention_mask"] = attention_mask
 
         return sample
-
-        
-        
-
-
-
-        
-
-
-
-
-    

@@ -2,16 +2,38 @@ from typing import Any, Callable, Dict, List, Optional, Union
 import PIL
 import torch
 from diffusers import StableDiffusionPipeline, DDIMInverseScheduler
-from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img import preprocess
-from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_pix2pix_zero import Pix2PixInversionPipelineOutput
+from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img import (
+    preprocess,
+)
+from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_pix2pix_zero import (
+    Pix2PixInversionPipelineOutput,
+)
 
 
 class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
-    def __init__(self, vae, text_encoder, tokenizer, unet, scheduler, safety_checker, feature_extractor, requires_safety_checker: bool = True):
-        super().__init__(vae, text_encoder, tokenizer, unet, scheduler, safety_checker, feature_extractor, requires_safety_checker)
+    def __init__(
+        self,
+        vae,
+        text_encoder,
+        tokenizer,
+        unet,
+        scheduler,
+        safety_checker,
+        feature_extractor,
+        requires_safety_checker: bool = True,
+    ):
+        super().__init__(
+            vae,
+            text_encoder,
+            tokenizer,
+            unet,
+            scheduler,
+            safety_checker,
+            feature_extractor,
+            requires_safety_checker,
+        )
         self.inverse_scheduler = DDIMInverseScheduler.from_config(self.scheduler.config)
         # self.register_modules(inverse_scheduler=DDIMInverseScheduler.from_config(self.scheduler.config))
-
 
     def prepare_image_latents(self, image, batch_size, dtype, device, generator=None):
         if not isinstance(image, (torch.Tensor, PIL.Image.Image, list)):
@@ -29,7 +51,8 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
 
         if isinstance(generator, list):
             init_latents = [
-                self.vae.encode(image[i : i + 1]).latent_dist.sample(generator[i]) for i in range(batch_size)
+                self.vae.encode(image[i : i + 1]).latent_dist.sample(generator[i])
+                for i in range(batch_size)
             ]
             init_latents = torch.cat(init_latents, dim=0)
         else:
@@ -37,7 +60,10 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
 
         init_latents = self.vae.config.scaling_factor * init_latents
 
-        if batch_size > init_latents.shape[0] and batch_size % init_latents.shape[0] != 0:
+        if (
+            batch_size > init_latents.shape[0]
+            and batch_size % init_latents.shape[0] != 0
+        ):
             raise ValueError(
                 f"Cannot duplicate `image` of batch size {init_latents.shape[0]} to {batch_size} text prompts."
             )
@@ -47,8 +73,10 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
         latents = init_latents
 
         return latents
-    
-    def get_epsilon(self, model_output: torch.Tensor, sample: torch.Tensor, timestep: int):
+
+    def get_epsilon(
+        self, model_output: torch.Tensor, sample: torch.Tensor, timestep: int
+    ):
         pred_type = self.inverse_scheduler.config.prediction_type
         alpha_prod_t = self.inverse_scheduler.alphas_cumprod[timestep]
 
@@ -57,7 +85,9 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
         if pred_type == "epsilon":
             return model_output
         elif pred_type == "sample":
-            return (sample - alpha_prod_t ** (0.5) * model_output) / beta_prod_t ** (0.5)
+            return (sample - alpha_prod_t ** (0.5) * model_output) / beta_prod_t ** (
+                0.5
+            )
         elif pred_type == "v_prediction":
             return (alpha_prod_t**0.5) * model_output + (beta_prod_t**0.5) * sample
         else:
@@ -76,9 +106,15 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
         for i in range(hidden_states.shape[0]):
             noise = hidden_states[i][None, None, :, :]
             while True:
-                roll_amount = torch.randint(noise.shape[2] // 2, (1,), generator=generator).item()
-                reg_loss += (noise * torch.roll(noise, shifts=roll_amount, dims=2)).mean() ** 2
-                reg_loss += (noise * torch.roll(noise, shifts=roll_amount, dims=3)).mean() ** 2
+                roll_amount = torch.randint(
+                    noise.shape[2] // 2, (1,), generator=generator
+                ).item()
+                reg_loss += (
+                    noise * torch.roll(noise, shifts=roll_amount, dims=2)
+                ).mean() ** 2
+                reg_loss += (
+                    noise * torch.roll(noise, shifts=roll_amount, dims=3)
+                ).mean() ** 2
 
                 if noise.shape[2] <= 8:
                     break
@@ -90,7 +126,6 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
         var = hidden_states.var()
         return var + mean**2 - 1 - torch.log(var + 1e-7)
 
-    
     # based on https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_pix2pix_zero.py#L1063
     @torch.no_grad()
     def invert(
@@ -109,7 +144,7 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         lambda_auto_corr: float = 20.0,
         lambda_kl: float = 20.0,
-        num_reg_steps: int = 0, # disabled
+        num_reg_steps: int = 0,  # disabled
         num_auto_corr_rolls: int = 5,
     ):
         # 1. Define call parameters
@@ -132,7 +167,9 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
         image = preprocess(image)
 
         # 4. Prepare latent variables
-        latents = self.prepare_image_latents(image, batch_size, self.vae.dtype, device, generator)
+        latents = self.prepare_image_latents(
+            image, batch_size, self.vae.dtype, device, generator
+        )
 
         # 5. Encode input prompt
         num_images_per_prompt = 1
@@ -149,12 +186,18 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
         timesteps = self.inverse_scheduler.timesteps
 
         # 7. Denoising loop where we obtain the cross-attention maps.
-        num_warmup_steps = len(timesteps) - num_inference_steps * self.inverse_scheduler.order
+        num_warmup_steps = (
+            len(timesteps) - num_inference_steps * self.inverse_scheduler.order
+        )
         with self.progress_bar(total=num_inference_steps - 1) as progress_bar:
             for i, t in enumerate(timesteps[:-1]):
                 # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                latent_model_input = self.inverse_scheduler.scale_model_input(latent_model_input, t)
+                latent_model_input = (
+                    torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                )
+                latent_model_input = self.inverse_scheduler.scale_model_input(
+                    latent_model_input, t
+                )
 
                 # predict the noise residual
                 noise_pred = self.unet(
@@ -167,29 +210,41 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
                 # perform guidance
                 if do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+                    noise_pred = noise_pred_uncond + guidance_scale * (
+                        noise_pred_text - noise_pred_uncond
+                    )
 
                 # regularization of the noise prediction
                 with torch.enable_grad():
                     for _ in range(num_reg_steps):
                         if lambda_auto_corr > 0:
                             for _ in range(num_auto_corr_rolls):
-                                var = torch.autograd.Variable(noise_pred.detach().clone(), requires_grad=True)
+                                var = torch.autograd.Variable(
+                                    noise_pred.detach().clone(), requires_grad=True
+                                )
 
                                 # Derive epsilon from model output before regularizing to IID standard normal
-                                var_epsilon = self.get_epsilon(var, latent_model_input.detach(), t)
+                                var_epsilon = self.get_epsilon(
+                                    var, latent_model_input.detach(), t
+                                )
 
-                                l_ac = self.auto_corr_loss(var_epsilon, generator=generator)
+                                l_ac = self.auto_corr_loss(
+                                    var_epsilon, generator=generator
+                                )
                                 l_ac.backward()
 
                                 grad = var.grad.detach() / num_auto_corr_rolls
                                 noise_pred = noise_pred - lambda_auto_corr * grad
 
                         if lambda_kl > 0:
-                            var = torch.autograd.Variable(noise_pred.detach().clone(), requires_grad=True)
+                            var = torch.autograd.Variable(
+                                noise_pred.detach().clone(), requires_grad=True
+                            )
 
                             # Derive epsilon from model output before regularizing to IID standard normal
-                            var_epsilon = self.get_epsilon(var, latent_model_input.detach(), t)
+                            var_epsilon = self.get_epsilon(
+                                var, latent_model_input.detach(), t
+                            )
 
                             l_kld = self.kl_divergence(var_epsilon)
                             l_kld.backward()
@@ -200,11 +255,14 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
                         noise_pred = noise_pred.detach()
 
                 # compute the previous noisy sample x_t -> x_t-1
-                latents = self.inverse_scheduler.step(noise_pred, t, latents).prev_sample
+                latents = self.inverse_scheduler.step(
+                    noise_pred, t, latents
+                ).prev_sample
 
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or (
-                    (i + 1) > num_warmup_steps and (i + 1) % self.inverse_scheduler.order == 0
+                    (i + 1) > num_warmup_steps
+                    and (i + 1) % self.inverse_scheduler.order == 0
                 ):
                     progress_bar.update()
                     if callback is not None and i % callback_steps == 0:
@@ -227,16 +285,16 @@ class StableDiffusionPipelineWithDDIMInversion(StableDiffusionPipeline):
             return (inverted_latents, image)
 
         return Pix2PixInversionPipelineOutput(latents=inverted_latents, images=image)
-    
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from PIL import Image
     from diffusers import DDIMScheduler
+
     model_id = "CompVis/stable-diffusion-v1-4"
     input_prompt = "A photo of Barack Obama"
     prompt = "A photo of Barack Obama smiling with a big grin"
-    url = "obama.png" # https://github.com/cccntu/efficient-prompt-to-prompt/blob/main/ddim-inversion.ipynb
+    url = "obama.png"  # https://github.com/cccntu/efficient-prompt-to-prompt/blob/main/ddim-inversion.ipynb
 
     pipe = StableDiffusionPipelineWithDDIMInversion.from_pretrained(
         model_id,
