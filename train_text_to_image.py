@@ -59,6 +59,7 @@ from svdiff.utils import save_unet_svdiff, save_text_encoder_svdiff
 import yaml
 from get_dataset_mimic_cxr import MimicCXRDataset
 from imagenette_dataset import ImagenetteDataset
+from tuxemon_dataset import TuxemonDataset
 from adaptors import *
 from parse_args import parse_args
 
@@ -236,14 +237,14 @@ def log_validation(
 def main():
     args = parse_args()
 
-    
+    args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type) 
 
     if(args.use_random_word_addition):
-        args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_RWA")  
+        # args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_RWA")  
+        args.output_dir = args.output_dir + "_RWA"
     if(args.mitigation_threshold is not None):
-        args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_Mitigation_{}".format(args.mitigation_threshold))
-    else:    
-        args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type)  
+        # args.output_dir = os.path.join(args.output_dir, args.unet_pretraining_type + "_Mitigation_{}".format(args.mitigation_threshold))    
+        args.output_dir = args.output_dir + "_Mitigation_{}".format(args.mitigation_threshold)
 
     # Import CSV path from the YAML file
     with open("data_config.yaml") as file:
@@ -304,6 +305,7 @@ def main():
 
     # Handle the repository creation
     if accelerator.is_main_process:
+        print("OUTPUT DIR: ", args.output_dir)
         if args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
 
@@ -656,12 +658,20 @@ def main():
             tokenizer=tokenizer,
             transform=val_transforms,
         )
-        # test_dataset = ImagenetteDataset(
-        #     csv_file=args.test_data_path,
-        #     root_path=args.images_path_val,
-        #     tokenizer=tokenizer,
-        #     transform=val_transforms,
-        # )
+    elif(args.dataset == 'tuxemon'):
+        train_dataset = TuxemonDataset(
+            csv_file=args.train_data_path,
+            root_path=args.images_path_train,
+            tokenizer=tokenizer,
+            transform=train_transforms,
+            use_random_word_addition=args.use_random_word_addition
+        )
+        val_dataset = TuxemonDataset(
+            csv_file=args.val_data_path,
+            root_path=args.images_path_val,
+            tokenizer=tokenizer,
+            transform=val_transforms,
+        )
 
 
     # DataLoaders creation:

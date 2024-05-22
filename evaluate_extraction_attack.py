@@ -79,7 +79,7 @@ def evaluate(args, pipe):
 
     df = df.iloc[:1000]
     df = df.reset_index(drop=True)
-
+    
     image_paths = df['path'].tolist()
     image_paths = [os.path.join(args.samples_root, path) for path in image_paths]
     captions = df['text'].tolist()
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     # Add the following arguments
     parser.add_argument("--train_df", type=str, default="/raid/s2198939/MIMIC_Dataset/physionet.org/files/mimic-cxr-jpg/2.0.0/Prepared_CSVs/FINAL_TRAIN.xlsx")
     parser.add_argument("--samples_root", type=str, default="/raid/s2198939/MIMIC_Dataset/physionet.org/files/mimic-cxr-jpg/2.0.0")
-    parser.add_argument("--output_dir", type=str, default="", required=True)
+    parser.add_argument("--output_dir", type=str, default="", required=False)
     parser.add_argument("--unet_pretraining_type", type=str, default="full", required=True)
 
     args = parser.parse_args()

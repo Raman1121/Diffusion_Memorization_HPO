@@ -486,7 +486,12 @@ def apply_lora_to_unetv2(unet, image_lora_rank, dtype):
 def apply_svdiff_to_unet(args, cache_dir):
 
     # Adapted from https://github.com/mkshing/svdiff-pytorch/blob/a78f69e14410c1963318806050a566d262eca9f8/train_svdiff.py#L717
-    pretrained_model_name_or_path = args.pretrained_model_name_or_path
+
+    if(args is not None):
+        pretrained_model_name_or_path = args.pretrained_model_name_or_path
+    else:
+        pretrained_model_name_or_path = "runwayml/stable-diffusion-v1-5"
+        
     unet = load_unet_for_svdiff(pretrained_model_name_or_path, subfolder="unet", cache_dir=cache_dir)
 
     unet.requires_grad_(False)
@@ -1231,8 +1236,8 @@ def enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask):
         attention_idx = attention_pattern[i%2]
         mask_element = down_block_mask[i]
     
-        print("Block: ", block_idx)
-        print("Attention: ", attention_idx)
+        # print("Block: ", block_idx)
+        # print("Attention: ", attention_idx)
     
         if(mask_element == 0):
             disable_grad_svdiff(unet_with_svdiff.down_blocks[block_idx].attentions[attention_idx].transformer_blocks)
@@ -1253,8 +1258,8 @@ def enable_disable_svdiff_with_mask(unet_with_svdiff, binary_mask):
         mask_element = up_block_mask[i] 
         block_idx = (i//2)+1 # Indexing for up-blocks starts from 1
         attention_idx = attention_pattern[i%2]
-        print("Block: ", block_idx)
-        print("Attention: ", attention_idx)
+        # print("Block: ", block_idx)
+        # print("Attention: ", attention_idx)
     
         if(mask_element == 0):
             disable_grad_svdiff(unet_with_svdiff.up_blocks[block_idx].attentions[attention_idx].transformer_blocks)
