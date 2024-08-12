@@ -483,6 +483,10 @@ def parse_args():
         default=None,
         help="Optuna study name. Multiple studies can share the same DB.",
     )
+    parser.add_argument(
+        "--random_sampler",
+        action="store_true",
+    )
 
     ########################## Synthetic Data Generation Args ##########################
 

@@ -67,6 +67,7 @@ from metrics_utils import *
 # For HPO
 import optuna
 from optuna.trial import TrialState
+from optuna.samplers import RandomSampler
 
 from parse_args import parse_args
 
@@ -1670,6 +1671,9 @@ if __name__ == "__main__":
         or args.objective_metric == "avg_norm_FID"
         or args.objective_metric == "FID_MIFID"
     ):
+        if(args.random_sampler):
+            print("Using Random Sampler")
+
         directions = [
             "minimize",
             "minimize",
@@ -1680,15 +1684,21 @@ if __name__ == "__main__":
             study_name=args.optuna_study_name,
             storage=args.optuna_storage_name,
             load_if_exists=True,
+            sampler=RandomSampler() if args.random_sampler
         )
     else:
         direction = "minimize"
+
+        if(args.random_sampler):
+            print("Using Random Sampler")
+
         study = optuna.create_study(
             direction=direction,
             pruner=pruner,
             study_name=args.optuna_study_name,
             storage=args.optuna_storage_name,
             load_if_exists=True,
+            sampler=RandomSampler() if args.random_sampler
         )
 
     # Start the HPO Process
