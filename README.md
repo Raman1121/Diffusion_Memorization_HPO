@@ -1,6 +1,11 @@
 # Diffusion_Memorization_HPO
 A framework to reduce memorization in text-to-image diffusion models using HPO
 
+# Preparing the Environment
+conda create -n diffusion_hpo python=3.10  
+conda activate diffusion_hpo
+pip install -r requirements.txt
+
 
 ## Stage 1: Run the HPO
 ```
