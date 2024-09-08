@@ -1,13 +1,14 @@
 # Diffusion_Memorization_HPO
 A framework to reduce memorization in text-to-image diffusion models using HPO
 
-# Preparing the Environment
+## Preparing the Environment
 conda create -n diffusion_hpo python=3.10  
-conda activate diffusion_hpo
+conda activate diffusion_hpo  
+cd Diffusion_Memorization_HPO  
 pip install -r requirements.txt
 
 
-## Stage 1: Run the HPO
+## Stage 1: Run the HPO to Search for the Best Mask (Parameter Subset)
 ```
 python train_text_to_image_HPO.py --mixed_precision "fp16" --output_dir <output_dir> \
                                             --pretrained_model_name_or_path "runwayml/stable-diffusion-v1-5" --resolution 224 \
