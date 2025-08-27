@@ -1,11 +1,17 @@
-# Diffusion_Memorization_HPO
-A framework to reduce memorization in text-to-image diffusion models using HPO
+# MemControl: Mitigating Memorization in Diffusion Models via Automated Parameter Selection
+A bi-level optimisation framework that automates the selection of parameters for fine-tuning to mitigate data memorisation and ensure high-fidelity generation.  
+
+[Publication (WACV 2025)](https://openaccess.thecvf.com/content/WACV2025/papers/Dutt_MemControl_Mitigating_Memorization_in_Diffusion_Models_via_Automated_Parameter_Selection_WACV_2025_paper.pdf)
 
 ## Preparing the Environment
+- Python>=3.10.0
+- Pytorch>=2.0.1+cu12.1
+```
 conda create -n diffusion_hpo python=3.10  
 conda activate diffusion_hpo  
 cd Diffusion_Memorization_HPO  
 pip install -r requirements.txt
+```
 
 
 ## Stage 1: Run the HPO to Search for the Best Mask (Parameter Subset)
